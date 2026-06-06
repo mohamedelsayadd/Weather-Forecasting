@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
+
+from timezonefinder import TimezoneFinder
 
 from src.core.config import Settings
-from src.utils.timezone import get_timezone_finder
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def get_timezone_finder() -> TimezoneFinder:
+    return TimezoneFinder()
 
 
 def resolve_timezone(latitude: float, longitude: float, settings: Settings) -> str:
@@ -26,5 +33,3 @@ def resolve_timezone(latitude: float, longitude: float, settings: Settings) -> s
         settings.open_meteo_timezone_fallback,
     )
     return settings.open_meteo_timezone_fallback
-
-__all__ = ["get_timezone_finder", "resolve_timezone"]

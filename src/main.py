@@ -9,7 +9,9 @@ from fastapi import FastAPI, Request
 from src.api.v1.endpoints.forecast import router as forecast_router
 from src.core.config import get_settings
 from src.core.logging import configure_logging
-from src.services.chronos_forecasting import load_chronos_pipeline
+from src.models.ai_model.factory import create_ai_model
+from src.models.ai_model.providers.chronos import load_chronos_pipeline
+from src.services.weather.factory import create_weather_provider
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     logger.info("Application startup started app_name=%s", settings.app_name)
     app.state.chronos_pipeline = load_chronos_pipeline(settings)
+    app.state.ai_model = create_ai_model(settings, pipeline=app.state.chronos_pipeline)
+    app.state.weather_provider = create_weather_provider(settings)
     logger.info("Application startup completed")
     yield
     logger.info("Application shutdown completed")
