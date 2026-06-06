@@ -1,20 +1,24 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 import logging
 import time
+from zoneinfo import ZoneInfo
 
 import httpx
 import pandas as pd
 
 from src.core.config import Settings
+from src.services.timezone import resolve_timezone
 from src.services.weather_preprocessing import WEATHER_COLUMNS, preprocess_hourly_weather
 
 logger = logging.getLogger(__name__)
 
 
 async def fetch_recent_weather(latitude: float, longitude: float, settings: Settings) -> pd.DataFrame:
-    end_date = datetime.now(UTC).date()
+    timezone_name = resolve_timezone(latitude, longitude, settings)
+    timezone = ZoneInfo(timezone_name)
+    end_date = datetime.now(timezone).date()
     start_date = end_date - timedelta(days=settings.open_meteo_history_days)
     params = {
         "latitude": latitude,
@@ -22,16 +26,17 @@ async def fetch_recent_weather(latitude: float, longitude: float, settings: Sett
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "hourly": ",".join(WEATHER_COLUMNS),
-        "timezone": "UTC",
+        "timezone": timezone_name,
     }
 
     logger.info(
-        "Fetching Open-Meteo archive weather latitude=%.4f longitude=%.4f start_date=%s end_date=%s history_days=%s columns=%s",
+        "Fetching Open-Meteo archive weather latitude=%.4f longitude=%.4f start_date=%s end_date=%s history_days=%s timezone=%s columns=%s",
         latitude,
         longitude,
         start_date,
         end_date,
         settings.open_meteo_history_days,
+        timezone_name,
         len(WEATHER_COLUMNS),
     )
     start_time = time.perf_counter()
@@ -57,7 +62,7 @@ async def fetch_recent_weather(latitude: float, longitude: float, settings: Sett
         raise ValueError("Open-Meteo returned an empty hourly dataframe.")
 
     raw_df["time"] = pd.to_datetime(raw_df["time"], errors="coerce")
-    current_hour = pd.Timestamp(datetime.now(UTC)).tz_localize(None).floor("h")
+    current_hour = pd.Timestamp(datetime.now(timezone)).tz_localize(None).floor("h")
     raw_df = raw_df[raw_df["time"] <= current_hour]
 
     logger.info("Open-Meteo raw hourly rows available rows=%s current_hour=%s", len(raw_df), current_hour)

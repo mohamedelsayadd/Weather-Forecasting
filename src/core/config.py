@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     open_meteo_url: str
     open_meteo_timeout_seconds: float
     open_meteo_history_days: int
+    open_meteo_timezone_fallback: str
     chronos_model_id: str
     chronos_device_map: str
     prediction_length: int
