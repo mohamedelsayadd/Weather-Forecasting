@@ -92,3 +92,52 @@ def build_chronos_context(df: pd.DataFrame, weather_parameter: str) -> pd.DataFr
         context_df["timestamp"].max(),
     )
     return context_df
+
+
+def build_chronos_context_from_values(
+    past_weather_values: dict[str, list[float]],
+    weather_parameter: str,
+    context_hours: int,
+) -> pd.DataFrame:
+    logger.info("Building Chronos context from past values weather_parameter=%s", weather_parameter)
+    if weather_parameter not in WEATHER_COLUMNS:
+        logger.warning("Chronos context failed: unsupported weather_parameter=%s", weather_parameter)
+        raise ValueError(f"Unsupported weather parameter: {weather_parameter}")
+    if weather_parameter not in past_weather_values:
+        logger.warning("Chronos context failed: missing past values weather_parameter=%s", weather_parameter)
+        raise ValueError("past_weather_values must include the requested weather_parameter.")
+
+    values = pd.to_numeric(pd.Series(past_weather_values[weather_parameter]), errors="coerce")
+    if values.isna().any():
+        logger.warning("Chronos context failed: non-numeric past values weather_parameter=%s", weather_parameter)
+        raise ValueError("past_weather_values must contain only numeric readings.")
+    if len(values) < context_hours:
+        logger.warning(
+            "Chronos context failed: insufficient past values weather_parameter=%s rows=%s context_hours=%s",
+            weather_parameter,
+            len(values),
+            context_hours,
+        )
+        raise ValueError(f"Need at least {context_hours} hourly records, got {len(values)}.")
+
+    context_values = values.tail(context_hours).reset_index(drop=True)
+    timestamps = pd.date_range(
+        end=pd.Timestamp.utcnow().floor("h").tz_localize(None),
+        periods=context_hours,
+        freq="h",
+    )
+    context_df = pd.DataFrame(
+        {
+            "item_id": "weather_series",
+            "timestamp": timestamps,
+            "target": context_values,
+        }
+    )
+    logger.info(
+        "Chronos context from past values built weather_parameter=%s rows=%s start=%s end=%s",
+        weather_parameter,
+        len(context_df),
+        context_df["timestamp"].min(),
+        context_df["timestamp"].max(),
+    )
+    return context_df

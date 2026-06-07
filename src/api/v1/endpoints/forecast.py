@@ -18,15 +18,16 @@ def get_forecasting_service(request: Request, settings: Settings) -> Forecasting
         settings=settings,
     )
 
-
 @router.post("", response_model=ForecastResponse)
 async def create_forecast(
     request_body: ForecastRequest,
     request: Request,
     settings: Settings = Depends(get_settings),
 ) -> ForecastResponse:
+    source = "past_weather_values" if request_body.past_weather_values is not None else "open_meteo"
     logger.info(
-        "Forecast request received latitude=%.4f longitude=%.4f weather_parameter=%s",
+        "Forecast request received source=%s latitude=%s longitude=%s weather_parameter=%s",
+        source,
         request_body.latitude,
         request_body.longitude,
         request_body.weather_parameter,
@@ -42,7 +43,7 @@ async def create_forecast(
         ) from exc
     except httpx.HTTPStatusError as exc:
         logger.warning(
-            "Open-Meteo returned an error status_code=%s latitude=%.4f longitude=%.4f",
+            "Open-Meteo returned an error status_code=%s latitude=%s longitude=%s",
             exc.response.status_code,
             request_body.latitude,
             request_body.longitude,
@@ -53,7 +54,7 @@ async def create_forecast(
         ) from exc
     except httpx.HTTPError as exc:
         logger.exception(
-            "Open-Meteo request failed latitude=%.4f longitude=%.4f",
+            "Open-Meteo request failed latitude=%s longitude=%s",
             request_body.latitude,
             request_body.longitude,
         )
