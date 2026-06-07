@@ -26,11 +26,12 @@ async def create_forecast(
 ) -> ForecastResponse:
     source = "past_weather_values" if request_body.past_weather_values is not None else "open_meteo"
     logger.info(
-        "Forecast request received source=%s latitude=%s longitude=%s weather_parameter=%s",
+        "Forecast request received source=%s latitude=%s longitude=%s weather_parameter=%s selected_weather_parameters=%s",
         source,
         request_body.latitude,
         request_body.longitude,
         request_body.weather_parameter,
+        request_body.selected_weather_parameters,
     )
     try:
         forecasting_service = get_forecasting_service(request, settings)

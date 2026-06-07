@@ -15,29 +15,35 @@ class FailingWeatherProvider:
 class FakeAIModel:
     def __init__(self) -> None:
         self.context_df: pd.DataFrame | None = None
+        self.targets: list[str] | None = None
 
-    def forecast(self, context_df: pd.DataFrame) -> pd.DataFrame:
+    def forecast(self, context_df: pd.DataFrame, targets: list[str]) -> pd.DataFrame:
         self.context_df = context_df
+        self.targets = targets
         return pd.DataFrame(
             {
-                "timestamp": [pd.Timestamp("2026-06-02 00:00")],
-                "predictions": [20.5],
-                "0.1": [19.0],
-                "0.5": [20.5],
-                "0.9": [22.0],
+                "target_name": targets,
+                "timestamp": [pd.Timestamp("2026-06-02 00:00")] * len(targets),
+                "predictions": [20.5] * len(targets),
+                "0.1": [19.0] * len(targets),
+                "0.5": [20.5] * len(targets),
+                "0.9": [22.0] * len(targets),
             }
         )
 
-    def forecast_to_records(self, pred_df: pd.DataFrame) -> list[dict[str, float | str]]:
-        return [
-            {
-                "timestamp": pd.Timestamp(pred_df.loc[0, "timestamp"]).isoformat(),
-                "prediction": float(pred_df.loc[0, "predictions"]),
-                "q10": float(pred_df.loc[0, "0.1"]),
-                "q50": float(pred_df.loc[0, "0.5"]),
-                "q90": float(pred_df.loc[0, "0.9"]),
-            }
-        ]
+    def forecast_to_records(self, pred_df: pd.DataFrame, targets: list[str]) -> dict[str, list[dict[str, float | str]]]:
+        forecasts = {target: [] for target in targets}
+        for _, row in pred_df.iterrows():
+            forecasts[str(row["target_name"])].append(
+                {
+                    "timestamp": pd.Timestamp(row["timestamp"]).isoformat(),
+                    "prediction": float(row["predictions"]),
+                    "q10": float(row["0.1"]),
+                    "q50": float(row["0.5"]),
+                    "q90": float(row["0.9"]),
+                }
+            )
+        return forecasts
 
 
 def make_settings() -> Settings:
@@ -60,11 +66,14 @@ def test_create_forecast_uses_past_weather_values_without_weather_provider() -> 
 
     assert response.latitude is None
     assert response.longitude is None
-    assert response.weather_parameter == "temperature_2m"
+    assert response.weather_parameters == ["temperature", "wind_speed"]
     assert response.prediction_length == 24
-    assert len(response.forecast) == 1
+    assert len(response.forecasts["temperature"]) == 1
+    assert len(response.forecasts["wind_speed"]) == 1
     assert ai_model.context_df is not None
-    assert ai_model.context_df["target"].tolist() == [float(value) for value in range(2, 170)]
+    assert ai_model.targets == ["temperature", "wind_speed"]
+    assert ai_model.context_df["temperature"].tolist() == [float(value) for value in range(2, 170)]
+    assert ai_model.context_df["wind_speed"].tolist() == [float(value) for value in range(102, 270)]
 
 
 async def create_forecast_with_past_weather_values() -> tuple[ForecastResponse, FakeAIModel]:
@@ -75,8 +84,11 @@ async def create_forecast_with_past_weather_values() -> tuple[ForecastResponse, 
         settings=make_settings(),
     )
     request = ForecastRequest(
-        weather_parameter="temperature_2m",
-        past_weather_values={"temperature_2m": [float(value) for value in range(170)]},
+        weather_parameter=["temperature", "wind_speed"],
+        past_weather_values={
+            "temperature": [float(value) for value in range(170)],
+            "wind_speed": [float(value) for value in range(100, 270)],
+        },
     )
 
     response = await service.create_forecast(request)

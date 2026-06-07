@@ -8,7 +8,7 @@ def test_forecast_dataframe_to_records_converts_chronos_output() -> None:
         {
             "item_id": ["weather_series"],
             "timestamp": [pd.Timestamp("2026-06-02 00:00")],
-            "target_name": ["target"],
+            "target_name": ["temperature"],
             "predictions": [20.5],
             "0.1": [19.0],
             "0.5": [20.5],
@@ -16,12 +16,14 @@ def test_forecast_dataframe_to_records_converts_chronos_output() -> None:
         }
     )
 
-    assert forecast_dataframe_to_records(pred_df) == [
-        {
-            "timestamp": "2026-06-02T00:00:00",
-            "prediction": 20.5,
-            "q10": 19.0,
-            "q50": 20.5,
-            "q90": 22.0,
-        }
-    ]
+    assert forecast_dataframe_to_records(pred_df, ["temperature"]) == {
+        "temperature": [
+            {
+                "timestamp": "2026-06-02T00:00:00",
+                "prediction": 20.5,
+                "q10": 19.0,
+                "q50": 20.5,
+                "q90": 22.0,
+            }
+        ]
+    }

@@ -33,21 +33,23 @@ class ChronosAIModel(AIModel):
         self.settings = settings
         self.pipeline = pipeline if pipeline is not None else load_chronos_pipeline(settings)
 
-    def forecast(self, context_df: pd.DataFrame) -> pd.DataFrame:
-        return forecast_next_24_hours(context_df, self.pipeline, self.settings)
+    def forecast(self, context_df: pd.DataFrame, targets: list[str]) -> pd.DataFrame:
+        return forecast_next_24_hours(context_df, targets, self.pipeline, self.settings)
 
-    def forecast_to_records(self, pred_df: pd.DataFrame) -> list[dict[str, float | str]]:
-        return forecast_dataframe_to_records(pred_df)
+    def forecast_to_records(self, pred_df: pd.DataFrame, targets: list[str]) -> dict[str, list[dict[str, float | str]]]:
+        return forecast_dataframe_to_records(pred_df, targets)
 
 
 def forecast_next_24_hours(
     context_df: pd.DataFrame,
+    targets: list[str],
     pipeline: Chronos2Pipeline,
     settings: Settings,
 ) -> pd.DataFrame:
     logger.info(
-        "Chronos forecast started context_rows=%s prediction_length=%s",
+        "Chronos forecast started context_rows=%s targets=%s prediction_length=%s",
         len(context_df),
+        targets,
         settings.prediction_length,
     )
     start_time = time.perf_counter()
@@ -56,14 +58,14 @@ def forecast_next_24_hours(
         prediction_length=settings.prediction_length,
         quantile_levels=[0.1, 0.5, 0.9],
         timestamp_column="timestamp",
-        target="target",
+        target=targets,
     )
     latency_ms = (time.perf_counter() - start_time) * 1000
     logger.info("Chronos forecast completed prediction_rows=%s latency_ms=%.2f", len(pred_df), latency_ms)
     return pred_df
 
 
-def forecast_dataframe_to_records(pred_df: pd.DataFrame) -> list[dict[str, float | str]]:
+def forecast_dataframe_to_records(pred_df: pd.DataFrame, targets: list[str]) -> dict[str, list[dict[str, float | str]]]:
     logger.info("Converting Chronos forecast dataframe rows=%s columns=%s", len(pred_df), list(pred_df.columns))
     q10_column = _find_column(pred_df, "0.1", 0.1)
     q50_column = _find_column(pred_df, "0.5", 0.5)
@@ -74,9 +76,20 @@ def forecast_dataframe_to_records(pred_df: pd.DataFrame) -> list[dict[str, float
         logger.warning("Chronos forecast dataframe missing columns=%s", sorted(missing_columns))
         raise ValueError(f"Chronos prediction dataframe is missing columns: {sorted(missing_columns)}")
 
-    records = []
-    for _, row in pred_df.sort_values("timestamp").iterrows():
-        records.append(
+    if "target_name" not in pred_df.columns:
+        if len(targets) != 1:
+            logger.warning("Chronos forecast dataframe missing target_name for multi-target output")
+            raise ValueError("Chronos prediction dataframe is missing target_name for multi-target output.")
+        pred_df = pred_df.copy()
+        pred_df["target_name"] = targets[0]
+
+    forecasts = {target: [] for target in targets}
+    for _, row in pred_df.sort_values(["target_name", "timestamp"]).iterrows():
+        target_name = str(row["target_name"])
+        if target_name not in forecasts:
+            logger.warning("Chronos forecast dataframe returned unexpected target_name=%s", target_name)
+            continue
+        forecasts[target_name].append(
             {
                 "timestamp": pd.Timestamp(row["timestamp"]).isoformat(),
                 "prediction": float(row["predictions"]),
@@ -85,8 +98,14 @@ def forecast_dataframe_to_records(pred_df: pd.DataFrame) -> list[dict[str, float
                 "q90": float(row[q90_column]),
             }
         )
-    logger.info("Chronos forecast dataframe converted records=%s", len(records))
-    return records
+
+    missing_targets = [target for target, records in forecasts.items() if not records]
+    if missing_targets:
+        logger.warning("Chronos forecast dataframe missing forecast rows for targets=%s", missing_targets)
+        raise ValueError(f"Chronos prediction dataframe is missing forecast rows for targets: {missing_targets}")
+
+    logger.info("Chronos forecast dataframe converted targets=%s records=%s", targets, sum(len(rows) for rows in forecasts.values()))
+    return forecasts
 
 
 def _find_column(df: pd.DataFrame, *candidates: str | float) -> str | float:

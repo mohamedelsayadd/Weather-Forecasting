@@ -14,6 +14,14 @@ WEATHER_COLUMNS = [
     "wind_speed_10m",
     "wind_direction_10m",
 ]
+WEATHER_PARAMETER_TO_COLUMN = {
+    "temperature": "temperature_2m",
+    "relative_humidity": "relative_humidity_2m",
+    "surface_pressure": "surface_pressure",
+    "wind_speed": "wind_speed_10m",
+    "wind_direction": "wind_direction_10m",
+}
+WEATHER_PARAMETERS = list(WEATHER_PARAMETER_TO_COLUMN)
 
 
 def preprocess_hourly_weather(df: pd.DataFrame, context_hours: int) -> pd.DataFrame:
@@ -71,22 +79,23 @@ def preprocess_hourly_weather(df: pd.DataFrame, context_hours: int) -> pd.DataFr
     return result
 
 
-def build_chronos_context(df: pd.DataFrame, weather_parameter: str) -> pd.DataFrame:
-    logger.info("Building Chronos context weather_parameter=%s rows=%s", weather_parameter, len(df))
-    if weather_parameter not in WEATHER_COLUMNS:
-        logger.warning("Chronos context failed: unsupported weather_parameter=%s", weather_parameter)
-        raise ValueError(f"Unsupported weather parameter: {weather_parameter}")
+def build_chronos_context(df: pd.DataFrame, weather_parameters: list[str]) -> pd.DataFrame:
+    logger.info("Building Chronos context weather_parameters=%s rows=%s", weather_parameters, len(df))
+    _validate_weather_parameters(weather_parameters)
+    column_mapping = {WEATHER_PARAMETER_TO_COLUMN[parameter]: parameter for parameter in weather_parameters}
 
-    context_df = pd.DataFrame(
-        {
-            "item_id": "weather_series",
-            "timestamp": pd.to_datetime(df["timestamp"]),
-            "target": pd.to_numeric(df[weather_parameter], errors="raise"),
-        }
-    )
+    missing_columns = sorted(set(column_mapping) - set(df.columns))
+    if missing_columns:
+        logger.warning("Chronos context failed: missing_columns=%s", missing_columns)
+        raise ValueError(f"Missing expected weather columns: {missing_columns}")
+
+    context_df = pd.DataFrame({"item_id": "weather_series", "timestamp": pd.to_datetime(df["timestamp"])})
+    for source_column, target_column in column_mapping.items():
+        context_df[target_column] = pd.to_numeric(df[source_column], errors="raise")
+
     logger.info(
-        "Chronos context built weather_parameter=%s rows=%s start=%s end=%s",
-        weather_parameter,
+        "Chronos context built weather_parameters=%s rows=%s start=%s end=%s",
+        weather_parameters,
         len(context_df),
         context_df["timestamp"].min(),
         context_df["timestamp"].max(),
@@ -96,48 +105,50 @@ def build_chronos_context(df: pd.DataFrame, weather_parameter: str) -> pd.DataFr
 
 def build_chronos_context_from_values(
     past_weather_values: dict[str, list[float]],
-    weather_parameter: str,
+    weather_parameters: list[str],
     context_hours: int,
 ) -> pd.DataFrame:
-    logger.info("Building Chronos context from past values weather_parameter=%s", weather_parameter)
-    if weather_parameter not in WEATHER_COLUMNS:
-        logger.warning("Chronos context failed: unsupported weather_parameter=%s", weather_parameter)
-        raise ValueError(f"Unsupported weather parameter: {weather_parameter}")
-    if weather_parameter not in past_weather_values:
-        logger.warning("Chronos context failed: missing past values weather_parameter=%s", weather_parameter)
-        raise ValueError("past_weather_values must include the requested weather_parameter.")
-
-    values = pd.to_numeric(pd.Series(past_weather_values[weather_parameter]), errors="coerce")
-    if values.isna().any():
-        logger.warning("Chronos context failed: non-numeric past values weather_parameter=%s", weather_parameter)
-        raise ValueError("past_weather_values must contain only numeric readings.")
-    if len(values) < context_hours:
-        logger.warning(
-            "Chronos context failed: insufficient past values weather_parameter=%s rows=%s context_hours=%s",
-            weather_parameter,
-            len(values),
-            context_hours,
-        )
-        raise ValueError(f"Need at least {context_hours} hourly records, got {len(values)}.")
-
-    context_values = values.tail(context_hours).reset_index(drop=True)
+    logger.info("Building Chronos context from past values weather_parameters=%s", weather_parameters)
+    _validate_weather_parameters(weather_parameters)
     timestamps = pd.date_range(
         end=pd.Timestamp.utcnow().floor("h").tz_localize(None),
         periods=context_hours,
         freq="h",
     )
-    context_df = pd.DataFrame(
-        {
-            "item_id": "weather_series",
-            "timestamp": timestamps,
-            "target": context_values,
-        }
-    )
+    context_df = pd.DataFrame({"item_id": "weather_series", "timestamp": timestamps})
+
+    for weather_parameter in weather_parameters:
+        if weather_parameter not in past_weather_values:
+            logger.warning("Chronos context failed: missing past values weather_parameter=%s", weather_parameter)
+            raise ValueError("past_weather_values must include all requested weather parameters.")
+
+        values = pd.to_numeric(pd.Series(past_weather_values[weather_parameter]), errors="coerce")
+        if values.isna().any():
+            logger.warning("Chronos context failed: non-numeric past values weather_parameter=%s", weather_parameter)
+            raise ValueError("past_weather_values must contain only numeric readings.")
+        if len(values) < context_hours:
+            logger.warning(
+                "Chronos context failed: insufficient past values weather_parameter=%s rows=%s context_hours=%s",
+                weather_parameter,
+                len(values),
+                context_hours,
+            )
+            raise ValueError(f"Need at least {context_hours} hourly records, got {len(values)}.")
+
+        context_df[weather_parameter] = values.tail(context_hours).reset_index(drop=True)
+
     logger.info(
-        "Chronos context from past values built weather_parameter=%s rows=%s start=%s end=%s",
-        weather_parameter,
+        "Chronos context from past values built weather_parameters=%s rows=%s start=%s end=%s",
+        weather_parameters,
         len(context_df),
         context_df["timestamp"].min(),
         context_df["timestamp"].max(),
     )
     return context_df
+
+
+def _validate_weather_parameters(weather_parameters: list[str]) -> None:
+    unsupported_parameters = sorted(set(weather_parameters) - set(WEATHER_PARAMETERS))
+    if unsupported_parameters:
+        logger.warning("Chronos context failed: unsupported weather_parameters=%s", unsupported_parameters)
+        raise ValueError(f"Unsupported weather parameters: {unsupported_parameters}")

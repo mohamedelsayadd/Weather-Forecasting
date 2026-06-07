@@ -42,12 +42,14 @@ def test_build_chronos_context_uses_selected_parameter_as_target() -> None:
         {
             "timestamp": pd.date_range("2026-06-01", periods=2, freq="h"),
             "temperature_2m": [10.0, 11.0],
+            "wind_speed_10m": [2.0, 3.0],
         }
     )
 
-    result = build_chronos_context(df, "temperature_2m")
+    result = build_chronos_context(df, ["temperature", "wind_speed"])
 
 
-    assert result.columns.tolist() == ["item_id", "timestamp", "target"]
+    assert result.columns.tolist() == ["item_id", "timestamp", "temperature", "wind_speed"]
     assert result["item_id"].tolist() == ["weather_series", "weather_series"]
-    assert result["target"].tolist() == [10.0, 11.0]
+    assert result["temperature"].tolist() == [10.0, 11.0]
+    assert result["wind_speed"].tolist() == [2.0, 3.0]
