@@ -1,6 +1,6 @@
 ## Weather Forecasting API
 
-FastAPI service that forecasts the next 24 hours for one or more requested weather parameters using Chronos-2. It can either fetch the latest 7 days / 168 hourly weather records from Open-Meteo by location, or use direct historical values supplied in the request.
+FastAPI service that returns current sensor values, the next 24 hourly forecast rows, and the next 7 daily min/max forecast rows for all sensor fields returned by ReNile-IOT using Chronos-2.
 
 ### Run
 
@@ -14,54 +14,37 @@ uv run uvicorn src.main:app --reload
 
 ```json
 {
-  "latitude": 30.0551,
-  "longitude": 31.3570,
-  "weather_parameter": "temperature"
+  "JWT": "eyJhbGciOi...",
+  "device_id": "681740b2b2b422389cd7831e"
 }
 ```
 
-Request 2 to 4 parameters:
+The service calls ReNile-IOT with `data_type=month_hours`, `start_time` set to current time minus 20 days, and the request `device_id`. It interpolates hourly gaps, then uses only the last 14 days / 336 hourly rows as model context. Chronos predicts the next 7 days / 168 hourly rows. The request `JWT` is sent as `Authorization: JWT <token>`.
+
+All sensor keys returned by ReNile-IOT are used as forecast targets dynamically. Column names are not mapped or filtered.
+
+The response has three sections:
 
 ```json
 {
-  "latitude": 30.0551,
-  "longitude": 31.3570,
-  "weather_parameter": ["temperature", "wind_speed"]
+  "current": {
+    "time": "2026-06-16T10:00:00",
+    "SO2": 24.0,
+    "ambient_temp": 33.2
+  },
+  "hourly24": [
+    {
+      "time": "2026-06-16T11:00:00",
+      "SO2": 25.1,
+      "ambient_temp": 34.0
+    }
+  ],
+  "daily7": [
+    {
+      "time": "2026-06-17",
+      "SO2": {"min": 20.0, "max": 41.0},
+      "ambient_temp": {"min": 27.5, "max": 40.2}
+    }
+  ]
 }
 ```
-
-Request all supported parameters:
-
-```json
-{
-  "latitude": 30.0551,
-  "longitude": 31.3570,
-  "weather_parameter": "all"
-}
-```
-
-Or provide historical values directly and omit latitude/longitude. Shortened example:
-
-```json
-{
-  "weather_parameter": ["temperature", "wind_speed"],
-  "past_weather_values": {
-    "temperature": [20.1, 20.4, 20.0],
-    "wind_speed": [3.1, 3.4, 3.0]
-  }
-}
-```
-
-Each selected `past_weather_values` parameter must contain at least 168 hourly readings. Only the selected parameters are required, and the service uses the latest 168 readings from each selected parameter as the Chronos context.
-
-Supported `weather_parameter` values:
-
-```text
-temperature
-relative_humidity
-surface_pressure
-wind_speed
-wind_direction
-```
-
-When `past_weather_values` is provided, Open-Meteo is not called. Otherwise, the service fetches all five weather columns from Open-Meteo, preprocesses the hourly data, then passes the selected parameters to Chronos as the `target` list.

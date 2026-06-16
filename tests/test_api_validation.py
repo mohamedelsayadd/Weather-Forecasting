@@ -31,6 +31,8 @@ def test_forecast_rejects_invalid_weather_parameter() -> None:
     response = client.post(
         "/api/v1/forecast",
         json={
+            "JWT": "test-token",
+            "device_id": "test-device",
             "latitude": 30.0,
             "longitude": 31.0,
             "weather_parameter": "rain",
@@ -40,88 +42,50 @@ def test_forecast_rejects_invalid_weather_parameter() -> None:
     assert response.status_code == 422
 
 
-def test_forecast_requires_location_without_past_weather_values() -> None:
+def test_forecast_rejects_extra_body_fields() -> None:
     response = client.post(
         "/api/v1/forecast",
-        json={"weather_parameter": "temperature"},
+        json={"JWT": "test-token", "device_id": "test-device", "weather_parameter": "temperature"},
     )
 
     assert response.status_code == 422
 
 
-def test_forecast_rejects_short_past_weather_values() -> None:
+def test_forecast_requires_jwt() -> None:
     response = client.post(
         "/api/v1/forecast",
         json={
-            "weather_parameter": "temperature",
-            "past_weather_values": {"temperature": [20.0] * 167},
+            "device_id": "test-device",
         },
     )
 
     assert response.status_code == 422
 
 
-def test_forecast_requires_requested_parameter_in_past_weather_values() -> None:
+def test_forecast_requires_device_id() -> None:
     response = client.post(
         "/api/v1/forecast",
         json={
-            "weather_parameter": "temperature",
-            "past_weather_values": {"wind_speed": [5.0] * 168},
+            "JWT": "test-token",
         },
     )
 
     assert response.status_code == 422
 
 
-def test_forecast_rejects_duplicate_weather_parameter_list() -> None:
+def test_forecast_rejects_empty_jwt() -> None:
     response = client.post(
         "/api/v1/forecast",
-        json={
-            "weather_parameter": ["temperature", "temperature"],
-            "past_weather_values": {"temperature": [20.0] * 168},
-        },
+        json={"JWT": "", "device_id": "test-device"},
     )
 
     assert response.status_code == 422
 
 
-def test_forecast_rejects_single_item_weather_parameter_list() -> None:
+def test_forecast_rejects_empty_device_id() -> None:
     response = client.post(
         "/api/v1/forecast",
-        json={
-            "weather_parameter": ["temperature"],
-            "past_weather_values": {"temperature": [20.0] * 168},
-        },
-    )
-
-    assert response.status_code == 422
-
-
-def test_forecast_rejects_all_parameters_as_list() -> None:
-    response = client.post(
-        "/api/v1/forecast",
-        json={
-            "weather_parameter": ["temperature", "relative_humidity", "surface_pressure", "wind_speed", "wind_direction"],
-            "past_weather_values": {
-                "temperature": [20.0] * 168,
-                "relative_humidity": [50.0] * 168,
-                "surface_pressure": [1000.0] * 168,
-                "wind_speed": [5.0] * 168,
-                "wind_direction": [180.0] * 168,
-            },
-        },
-    )
-
-    assert response.status_code == 422
-
-
-def test_forecast_requires_all_past_weather_values_for_all_selection() -> None:
-    response = client.post(
-        "/api/v1/forecast",
-        json={
-            "weather_parameter": "all",
-            "past_weather_values": {"temperature": [20.0] * 168},
-        },
+        json={"JWT": "test-token", "device_id": ""},
     )
 
     assert response.status_code == 422

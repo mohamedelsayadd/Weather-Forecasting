@@ -7,5 +7,5 @@ import pandas as pd
 
 class WeatherProvider(ABC):
     @abstractmethod
-    async def fetch_recent_weather(self, latitude: float, longitude: float) -> pd.DataFrame:
+    async def fetch_recent_weather(self, jwt: str, device_id: str) -> pd.DataFrame:
         raise NotImplementedError

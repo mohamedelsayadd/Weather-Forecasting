@@ -3,7 +3,9 @@ from src.utils.preprocessing import (
     WEATHER_PARAMETER_TO_COLUMN,
     WEATHER_PARAMETERS,
     build_chronos_context,
+    build_dynamic_chronos_context,
     build_chronos_context_from_values,
+    preprocess_dynamic_hourly_weather,
     preprocess_hourly_weather,
 )
 
@@ -12,6 +14,8 @@ __all__ = [
     "WEATHER_PARAMETER_TO_COLUMN",
     "WEATHER_PARAMETERS",
     "build_chronos_context",
+    "build_dynamic_chronos_context",
     "build_chronos_context_from_values",
+    "preprocess_dynamic_hourly_weather",
     "preprocess_hourly_weather",
 ]
