@@ -95,7 +95,7 @@ def forecast_dataframe_to_daily_ranges(pred_df: pd.DataFrame, targets: list[str]
     for date, group in wide_df.groupby("date", sort=True):
         row: dict[str, object] = {"time": date}
         for target in targets:
-            values = pd.to_numeric(group[target], errors="coerce").dropna()
+            values = pd.to_numeric(group[target], errors="coerce").dropna().clip(lower=0)
             if values.empty:
                 row[target] = {"min": None, "max": None}
             else:
@@ -139,10 +139,10 @@ def forecast_dataframe_to_records(pred_df: pd.DataFrame, targets: list[str]) -> 
         forecasts[target_name].append(
             {
                 "timestamp": pd.Timestamp(row["timestamp"]).isoformat(),
-                "prediction": float(row["predictions"]),
-                "q10": float(row[q10_column]),
-                "q50": float(row[q50_column]),
-                "q90": float(row[q90_column]),
+                "prediction": _forecast_response_value(row["predictions"]),
+                "q10": _forecast_response_value(row[q10_column]),
+                "q50": _forecast_response_value(row[q50_column]),
+                "q90": _forecast_response_value(row[q90_column]),
             }
         )
 
@@ -199,9 +199,14 @@ def _forecast_dataframe_to_wide(pred_df: pd.DataFrame, targets: list[str]) -> pd
 def _row_to_time_record(row: pd.Series, targets: list[str]) -> dict[str, object]:
     record: dict[str, object] = {"time": pd.Timestamp(row["timestamp"]).isoformat()}
     for target in targets:
-        value = row[target]
-        record[target] = None if pd.isna(value) else float(value)
+        record[target] = _forecast_response_value(row[target])
     return record
+
+
+def _forecast_response_value(value: object) -> float | None:
+    if pd.isna(value):
+        return None
+    return max(float(value), 0.0)
 
 
 def _find_column(df: pd.DataFrame, *candidates: str | float) -> str | float:
