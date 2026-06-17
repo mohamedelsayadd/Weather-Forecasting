@@ -224,9 +224,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Evaluation Notebook
-eval.ipynb
-
 # Review Report
 Review.md
 
