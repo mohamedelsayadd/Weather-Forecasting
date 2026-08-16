@@ -69,7 +69,11 @@ async def fetch_recent_weather(jwt: str, device_id: str, settings: Settings) -> 
         raw_df.columns.tolist(),
         _preview_dataframe(raw_df),
     )
-    processed_df = preprocess_dynamic_hourly_weather(raw_df, context_hours=settings.context_hours)
+    processed_df = preprocess_dynamic_hourly_weather(
+        raw_df,
+        context_hours=settings.context_hours,
+        min_context_coverage=settings.min_context_coverage,
+    )
     logger.info(
         "ReNile-IOT processed dataframe ready rows=%s columns=%s preview=%s",
         len(processed_df),

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     chronos_device_map: str
     prediction_length: int
     context_hours: int
+    min_context_coverage: float = 0.5
 
     model_config = SettingsConfigDict(env_file="src/.env", env_file_encoding="utf-8")
 

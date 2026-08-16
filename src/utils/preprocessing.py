@@ -110,12 +110,17 @@ def build_chronos_context(df: pd.DataFrame, weather_parameters: list[str]) -> pd
     return context_df
 
 
-def preprocess_dynamic_hourly_weather(df: pd.DataFrame, context_hours: int) -> pd.DataFrame:
+def preprocess_dynamic_hourly_weather(
+    df: pd.DataFrame,
+    context_hours: int,
+    min_context_coverage: float = 0.0,
+) -> pd.DataFrame:
     logger.info(
-        "Dynamic weather preprocessing started rows=%s columns=%s context_hours=%s preview=%s",
+        "Dynamic weather preprocessing started rows=%s columns=%s context_hours=%s min_context_coverage=%s preview=%s",
         len(df),
         df.columns.tolist(),
         context_hours,
+        min_context_coverage,
         _preview_dataframe(df),
     )
     if "timestamp" not in df.columns:
@@ -128,7 +133,7 @@ def preprocess_dynamic_hourly_weather(df: pd.DataFrame, context_hours: int) -> p
         raise ValueError("Weather dataframe does not contain any sensor columns.")
 
     cleaned = df[["timestamp", *sensor_columns]].copy()
-    cleaned["timestamp"] = pd.to_datetime(cleaned["timestamp"], errors="coerce")
+    cleaned["timestamp"] = pd.to_datetime(cleaned["timestamp"], errors="coerce").dt.floor("h")
     invalid_timestamps = int(cleaned["timestamp"].isna().sum())
     cleaned = cleaned.dropna(subset=["timestamp"])
 
@@ -149,7 +154,8 @@ def preprocess_dynamic_hourly_weather(df: pd.DataFrame, context_hours: int) -> p
     )
     cleaned = cleaned.drop_duplicates(subset=["timestamp"], keep="last").sort_values("timestamp")
     cleaned = cleaned.set_index("timestamp").asfreq("h")
-    missing_after_frequency = int(cleaned.isna().sum().sum())
+    real_mask = cleaned.notna()
+    missing_after_frequency = int((~real_mask).sum().sum())
     logger.info(
         "Dynamic weather preprocessing hourly frequency applied rows=%s missing_values=%s start=%s end=%s preview=%s",
         len(cleaned),
@@ -169,14 +175,38 @@ def preprocess_dynamic_hourly_weather(df: pd.DataFrame, context_hours: int) -> p
         raise ValueError(f"Need at least {context_hours} hourly records, got {len(cleaned)}.")
 
     result = cleaned.tail(context_hours).reset_index()
+
+    context_mask = real_mask.tail(context_hours)
+    sensor_coverage = {column: float(context_mask[column].mean()) for column in sensor_columns}
+    real_coverage = float(context_mask.to_numpy().mean())
+    starved_sensors = sorted(column for column, coverage in sensor_coverage.items() if coverage < min_context_coverage)
+
+    if starved_sensors:
+        logger.warning(
+            "Dynamic weather preprocessing failed: interpolated context context_hours=%s real_coverage=%.4f "
+            "min_context_coverage=%s starved_sensors=%s sensor_coverage=%s",
+            context_hours,
+            real_coverage,
+            min_context_coverage,
+            starved_sensors,
+            sensor_coverage,
+        )
+        raise ValueError(
+            f"Context is mostly interpolated: sensors {starved_sensors} have less than "
+            f"{min_context_coverage:.0%} real readings across the {context_hours}-hour context."
+        )
+
     logger.info(
-        "Dynamic weather preprocessing completed input_rows=%s output_rows=%s sensors=%s missing_before=%s missing_after_frequency=%s invalid_timestamps=%s start=%s end=%s processed_preview=%s",
+        "Dynamic weather preprocessing completed input_rows=%s output_rows=%s sensors=%s missing_before=%s missing_after_frequency=%s invalid_timestamps=%s real_coverage=%.4f real_rows_in_context=%s sensor_coverage=%s start=%s end=%s processed_preview=%s",
         len(df),
         len(result),
         len(sensor_columns),
         missing_before,
         missing_after_frequency,
         invalid_timestamps,
+        real_coverage,
+        int(context_mask.all(axis=1).sum()),
+        sensor_coverage,
         result["timestamp"].min(),
         result["timestamp"].max(),
         _preview_dataframe(result),
