@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Weather Forecasting API" width="100%">
+  <img src="weather-forecassing-banner.jpeg" alt="Weather Forecasting API" width="100%">
 </p>
 
 ## Weather Forecasting API
