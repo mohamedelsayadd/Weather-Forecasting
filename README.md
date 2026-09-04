@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="Weather Forecasting API" width="100%">
+</p>
+
 ## Weather Forecasting API
 
 FastAPI service that returns current sensor values, the next 24 hourly forecast rows, and the next 7 daily min/max forecast rows for all sensor fields returned by ReNile-IOT using Chronos-2.
