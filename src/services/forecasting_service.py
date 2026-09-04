@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
+
+import pandas as pd
 
 from src.core.config import Settings
 from src.models.ai_model.interface import AIModel
 from src.models.schemas.forecast import ForecastRequest, ForecastResponse
 from src.services.weather.interface import WeatherProvider
-from src.utils.preprocessing import build_chronos_context, build_chronos_context_from_values
+from src.utils.preprocessing import build_dynamic_chronos_context
 
 logger = logging.getLogger(__name__)
 
@@ -18,35 +21,69 @@ class ForecastingService:
         self.settings = settings
 
     async def create_forecast(self, request_body: ForecastRequest) -> ForecastResponse:
-        weather_parameters = request_body.selected_weather_parameters
-        if request_body.past_weather_values is not None:
-            context_df = build_chronos_context_from_values(
-                request_body.past_weather_values,
-                weather_parameters,
-                self.settings.context_hours,
-            )
-            source = "past_weather_values"
-        else:
-            if request_body.latitude is None or request_body.longitude is None:
-                raise ValueError("latitude and longitude are required when past_weather_values is not provided.")
-            weather_df = await self.weather_provider.fetch_recent_weather(request_body.latitude, request_body.longitude)
-            context_df = build_chronos_context(weather_df, weather_parameters)
-            source = "open_meteo"
+        logger.info("Forecast service started source=renile_iot device_id=%s", request_body.device_id)
+        weather_df = await self.weather_provider.fetch_recent_weather(request_body.JWT, request_body.device_id)
+        logger.info(
+            "Forecast service received processed weather data device_id=%s rows=%s columns=%s preview=%s",
+            request_body.device_id,
+            len(weather_df),
+            weather_df.columns.tolist(),
+            weather_df.head(3).to_dict(orient="records"),
+        )
+        context_df, weather_parameters = build_dynamic_chronos_context(weather_df)
+        current = _current_weather_record(weather_df, weather_parameters)
+        logger.info("Forecast service built current weather record device_id=%s current=%s", request_body.device_id, current)
+        logger.info(
+            "Forecast service prepared model input device_id=%s targets=%s rows=%s columns=%s preview=%s",
+            request_body.device_id,
+            weather_parameters,
+            len(context_df),
+            context_df.columns.tolist(),
+            context_df.head(3).to_dict(orient="records"),
+        )
 
+        logger.info("Forecast model inference started device_id=%s targets=%s", request_body.device_id, weather_parameters)
         pred_df = self.ai_model.forecast(context_df, weather_parameters)
-        forecasts = self.ai_model.forecast_to_records(pred_df, weather_parameters)
+        logger.info(
+            "Forecast model inference completed device_id=%s prediction_rows=%s prediction_columns=%s prediction_preview=%s",
+            request_body.device_id,
+            len(pred_df),
+            pred_df.columns.tolist(),
+            pred_df.head(3).to_dict(orient="records"),
+        )
+        hourly24 = self.ai_model.forecast_to_hourly_rows(pred_df, weather_parameters, hours=24)
+        daily7 = self.ai_model.forecast_to_daily_ranges(pred_df, weather_parameters, days=7)
+        logger.info(
+            "Forecast response sections built device_id=%s hourly24_rows=%s daily7_rows=%s hourly24_preview=%s daily7_preview=%s",
+            request_body.device_id,
+            len(hourly24),
+            len(daily7),
+            hourly24[:3],
+            daily7[:3],
+        )
 
         logger.info(
-            "Forecast request completed source=%s weather_parameters=%s forecast_points=%s",
-            source,
+            "Forecast request completed source=renile_iot device_id=%s weather_parameters=%s hourly24_rows=%s daily7_rows=%s",
+            request_body.device_id,
             weather_parameters,
-            sum(len(rows) for rows in forecasts.values()),
+            len(hourly24),
+            len(daily7),
         )
 
         return ForecastResponse(
-            latitude=request_body.latitude,
-            longitude=request_body.longitude,
-            weather_parameters=weather_parameters,
-            prediction_length=self.settings.prediction_length,
-            forecasts=forecasts,
+            current=current,
+            hourly24=hourly24,
+            daily7=daily7,
         )
+
+
+def _current_weather_record(weather_df: pd.DataFrame, weather_parameters: list[str]) -> dict[str, Any]:
+    if weather_df.empty:
+        raise ValueError("Weather dataframe is empty.")
+
+    latest = weather_df.sort_values("timestamp").iloc[-1]
+    record: dict[str, Any] = {"time": pd.Timestamp(latest["timestamp"]).isoformat()}
+    for parameter in weather_parameters:
+        value = latest[parameter]
+        record[parameter] = None if pd.isna(value) else float(value)
+    return record

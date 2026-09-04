@@ -11,5 +11,9 @@ class AIModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def forecast_to_records(self, pred_df: pd.DataFrame, targets: list[str]) -> dict[str, list[dict[str, float | str]]]:
+    def forecast_to_hourly_rows(self, pred_df: pd.DataFrame, targets: list[str], hours: int) -> list[dict[str, object]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def forecast_to_daily_ranges(self, pred_df: pd.DataFrame, targets: list[str], days: int) -> list[dict[str, object]]:
         raise NotImplementedError
