@@ -32,8 +32,9 @@ async def create_forecast(
         forecasting_service = get_forecasting_service(request, settings)
         response = await forecasting_service.create_forecast(request_body)
         logger.info(
-            "Forecast API response ready device_id=%s current_keys=%s hourly24_rows=%s daily7_rows=%s hourly24_preview=%s daily7_preview=%s",
+            "Forecast API response ready device_id=%s last12hour_rows=%s current_keys=%s hourly24_rows=%s daily7_rows=%s hourly24_preview=%s daily7_preview=%s",
             request_body.device_id,
+            len(response.last12hour),
             list(response.current),
             len(response.hourly24),
             len(response.daily7),

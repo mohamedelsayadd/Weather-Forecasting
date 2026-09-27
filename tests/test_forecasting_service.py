@@ -80,6 +80,10 @@ def test_create_forecast_uses_all_renile_iot_columns() -> None:
         "SO2": 335.0,
         "ambient_temp": 435.0,
     }
+    assert len(response.last12hour) == 13
+    assert response.last12hour[0] == {"time": "2026-06-14T11:00:00", "SO2": 323.0, "ambient_temp": 423.0}
+    assert response.last12hour[-1] == response.current
+    assert list(response.model_dump())[0] == "last12hour"
     assert len(response.hourly24) == 24
     assert response.hourly24[0] == {"time": "2026-06-15T00:00:00", "SO2": 0.0, "ambient_temp": 100.0}
     assert len(response.daily7) == 7

@@ -33,6 +33,8 @@ class ForecastingService:
         context_df, weather_parameters = build_dynamic_chronos_context(weather_df)
         current = _current_weather_record(weather_df, weather_parameters)
         logger.info("Forecast service built current weather record device_id=%s current=%s", request_body.device_id, current)
+        last12hour = _last_hours_weather_records(weather_df, weather_parameters, hours=12)
+        logger.info("Forecast service built last12hour records device_id=%s rows=%s", request_body.device_id, len(last12hour))
         logger.info(
             "Forecast service prepared model input device_id=%s targets=%s rows=%s columns=%s preview=%s",
             request_body.device_id,
@@ -71,6 +73,7 @@ class ForecastingService:
         )
 
         return ForecastResponse(
+            last12hour=last12hour,
             current=current,
             hourly24=hourly24,
             daily7=daily7,
@@ -87,3 +90,20 @@ def _current_weather_record(weather_df: pd.DataFrame, weather_parameters: list[s
         value = latest[parameter]
         record[parameter] = None if pd.isna(value) else float(value)
     return record
+
+
+def _last_hours_weather_records(weather_df: pd.DataFrame, weather_parameters: list[str], hours: int) -> list[dict[str, Any]]:
+    if weather_df.empty:
+        raise ValueError("Weather dataframe is empty.")
+
+    sorted_df = weather_df.sort_values("timestamp")
+    latest = pd.Timestamp(sorted_df["timestamp"].iloc[-1])
+    window = sorted_df[pd.to_datetime(sorted_df["timestamp"]) >= latest - pd.Timedelta(hours=hours)]
+    records: list[dict[str, Any]] = []
+    for _, row in window.iterrows():
+        record: dict[str, Any] = {"time": pd.Timestamp(row["timestamp"]).isoformat()}
+        for parameter in weather_parameters:
+            value = row[parameter]
+            record[parameter] = None if pd.isna(value) else float(value)
+        records.append(record)
+    return records
