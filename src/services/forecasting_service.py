@@ -53,29 +53,29 @@ class ForecastingService:
             pred_df.columns.tolist(),
             pred_df.head(3).to_dict(orient="records"),
         )
-        hourly24 = self.ai_model.forecast_to_hourly_rows(pred_df, weather_parameters, hours=24)
+        hourly168 = self.ai_model.forecast_to_hourly_rows(pred_df, weather_parameters, hours=168)
         daily7 = self.ai_model.forecast_to_daily_ranges(pred_df, weather_parameters, days=7)
         logger.info(
-            "Forecast response sections built device_id=%s hourly24_rows=%s daily7_rows=%s hourly24_preview=%s daily7_preview=%s",
+            "Forecast response sections built device_id=%s hourly168_rows=%s daily7_rows=%s hourly168_preview=%s daily7_preview=%s",
             request_body.device_id,
-            len(hourly24),
+            len(hourly168),
             len(daily7),
-            hourly24[:3],
+            hourly168[:3],
             daily7[:3],
         )
 
         logger.info(
-            "Forecast request completed source=renile_iot device_id=%s weather_parameters=%s hourly24_rows=%s daily7_rows=%s",
+            "Forecast request completed source=renile_iot device_id=%s weather_parameters=%s hourly168_rows=%s daily7_rows=%s",
             request_body.device_id,
             weather_parameters,
-            len(hourly24),
+            len(hourly168),
             len(daily7),
         )
 
         return ForecastResponse(
             last12hour=last12hour,
             current=current,
-            hourly24=hourly24,
+            hourly168=hourly168,
             daily7=daily7,
         )
 

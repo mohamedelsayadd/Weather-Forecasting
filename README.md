@@ -27,7 +27,7 @@ The service calls ReNile-IOT with `data_type=month_hours`, `start_time` set to c
 
 All sensor keys returned by ReNile-IOT are used as forecast targets dynamically. Column names are not mapped or filtered.
 
-The response has four sections. `last12hour` contains the observed (interpolated hourly) readings from 12 hours before the latest reading up to and including it:
+The response has four sections. `last12hour` contains the observed (interpolated hourly) readings from 12 hours before the latest reading up to and including it. `hourly168` contains the hourly forecast for the next 168 hours (7 days):
 
 ```json
 {
@@ -43,7 +43,7 @@ The response has four sections. `last12hour` contains the observed (interpolated
     "SO2": 24.0,
     "ambient_temp": 33.2
   },
-  "hourly24": [
+  "hourly168": [
     {
       "time": "2026-06-16T11:00:00",
       "SO2": 25.1,
