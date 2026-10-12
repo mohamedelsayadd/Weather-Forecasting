@@ -140,19 +140,23 @@ def test_metrics_exclude_missing_actuals_and_zero_from_mape() -> None:
     assert metrics["mape"] == pytest.approx(sum(mape_terms) / 166 * 100)
 
 
-def test_rejects_history_that_does_not_reach_cutoff() -> None:
-    earlier = pd.DataFrame(
-        {
-            "timestamp": pd.date_range(CUTOFF - pd.Timedelta(hours=384), periods=48, freq="h"),
-            "SO2": 1.0,
-            "ambient_temp": 25.0,
-        }
-    )
-    raw_df = pd.concat([earlier, make_raw_df()], ignore_index=True)
-    raw_df = raw_df[~raw_df["timestamp"].between(CUTOFF - pd.Timedelta(hours=2), CUTOFF - pd.Timedelta(minutes=1))]
+def drop_hours_before_cutoff(raw_df: pd.DataFrame, hours: int) -> pd.DataFrame:
+    gap = raw_df["timestamp"].between(CUTOFF - pd.Timedelta(hours=hours), CUTOFF - pd.Timedelta(minutes=1))
+    return raw_df[~gap]
 
-    with pytest.raises(ValueError, match="History must end at 2026-10-04T23:00:00"):
-        run_evaluation(raw_df)
+
+def test_pads_short_trailing_gap_with_last_reading() -> None:
+    _, ai_model, _ = run_evaluation(drop_hours_before_cutoff(make_raw_df(), hours=6))
+
+    assert ai_model.context_df is not None
+    assert len(ai_model.context_df) == 336
+    assert ai_model.context_df["timestamp"].max() == CUTOFF - pd.Timedelta(hours=1)
+    assert ai_model.context_df["SO2"].tolist()[-7:] == [329.0] * 7
+
+
+def test_rejects_trailing_gap_longer_than_limit() -> None:
+    with pytest.raises(ValueError, match="25 hours gap, max 24"):
+        run_evaluation(drop_hours_before_cutoff(make_raw_df(), hours=25))
 
 
 def test_rejects_window_that_has_not_elapsed() -> None:

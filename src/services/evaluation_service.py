@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 EVALUATION_HOURS = 168
 EVALUATION_DAYS = 7
+MAX_TRAILING_GAP_HOURS = 24
 
 HistoryFetcher = Callable[[str, str, datetime, Settings], Awaitable[pd.DataFrame]]
 
@@ -119,6 +120,7 @@ class EvaluationService:
         history_df = raw_df[pd.to_datetime(raw_df["timestamp"]) < cutoff]
         if history_df.empty:
             raise ValueError(f"No readings before cutoff {cutoff.isoformat()}.")
+        history_df = _pad_trailing_gap(history_df, cutoff)
 
         processed_df = preprocess_dynamic_hourly_weather(
             history_df,
@@ -132,6 +134,27 @@ class EvaluationService:
                 f"History must end at {expected_last_hour.isoformat()}, but the last reading before cutoff is at {last_hour.isoformat()}."
             )
         return build_dynamic_chronos_context(processed_df)
+
+
+def _pad_trailing_gap(history_df: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
+    expected_last_hour = cutoff - pd.Timedelta(hours=1)
+    last_hour = pd.to_datetime(history_df["timestamp"]).max().floor("h")
+    gap_hours = int((expected_last_hour - last_hour) / pd.Timedelta(hours=1))
+    if gap_hours <= 0:
+        return history_df
+    if gap_hours > MAX_TRAILING_GAP_HOURS:
+        raise ValueError(
+            f"Last reading before cutoff is at {last_hour.isoformat()} ({gap_hours} hours gap, "
+            f"max {MAX_TRAILING_GAP_HOURS}). Choose another start_date."
+        )
+
+    logger.warning(
+        "Evaluation history has trailing gap, padding to cutoff last_reading=%s gap_hours=%s",
+        last_hour,
+        gap_hours,
+    )
+    padding = pd.DataFrame({"timestamp": [expected_last_hour]})
+    return pd.concat([history_df, padding], ignore_index=True)
 
 
 def _window_index(cutoff: pd.Timestamp) -> pd.DatetimeIndex:
