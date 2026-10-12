@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 
+from src.api.v1.endpoints.evaluation import router as evaluation_router
 from src.api.v1.endpoints.forecast import router as forecast_router
 from src.core.config import get_settings
 from src.core.logging import configure_logging
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     configure_logging(settings.logging_level)
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.include_router(forecast_router, prefix="/api/v1")
+    app.include_router(evaluation_router, prefix="/api/v1")
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
