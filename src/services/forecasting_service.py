@@ -21,8 +21,16 @@ class ForecastingService:
         self.settings = settings
 
     async def create_forecast(self, request_body: ForecastRequest) -> ForecastResponse:
-        logger.info("Forecast service started source=renile_iot device_id=%s", request_body.device_id)
-        weather_df = await self.weather_provider.fetch_recent_weather(request_body.JWT, request_body.device_id)
+        logger.info(
+            "Forecast service started source=renile_iot device_id=%s start_date=%s",
+            request_body.device_id,
+            request_body.start_date,
+        )
+        weather_df = await self.weather_provider.fetch_recent_weather(
+            request_body.JWT,
+            request_body.device_id,
+            request_body.start_date,
+        )
         logger.info(
             "Forecast service received processed weather data device_id=%s rows=%s columns=%s preview=%s",
             request_body.device_id,

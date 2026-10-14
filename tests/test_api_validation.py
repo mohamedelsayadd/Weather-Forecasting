@@ -1,7 +1,10 @@
+from datetime import datetime
+
 from fastapi.testclient import TestClient
 
 import src.main as app_module
 from src.main import app
+from src.models.schemas.forecast import ForecastRequest
 
 
 client = TestClient(app)
@@ -89,3 +92,18 @@ def test_forecast_rejects_empty_device_id() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_forecast_rejects_future_start_date() -> None:
+    response = client.post(
+        "/api/v1/forecast",
+        json={"JWT": "test-token", "device_id": "test-device", "start_date": "2999-01-01T00:00"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_forecast_request_normalizes_start_date_to_naive_utc() -> None:
+    request = ForecastRequest(JWT="test-token", device_id="test-device", start_date="2026-09-01T14:00+02:00")
+
+    assert request.start_date == datetime(2026, 9, 1, 12, 0)

@@ -25,8 +25,9 @@ async def create_forecast(
     settings: Settings = Depends(get_settings),
 ) -> ForecastResponse:
     logger.info(
-        "Forecast request received source=renile_iot device_id=%s",
+        "Forecast request received source=renile_iot device_id=%s start_date=%s",
         request_body.device_id,
+        request_body.start_date,
     )
     try:
         forecasting_service = get_forecasting_service(request, settings)

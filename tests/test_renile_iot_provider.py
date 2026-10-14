@@ -1,7 +1,9 @@
+from datetime import datetime
+
 import pandas as pd
 import pytest
 
-from src.services.weather.providers.renile_iot import parse_renile_iot_payload
+from src.services.weather.providers.renile_iot import filter_before, history_start_time, parse_renile_iot_payload
 
 
 def test_parse_renile_iot_payload_preserves_dynamic_sensor_columns() -> None:
@@ -66,3 +68,27 @@ def test_parse_renile_iot_payload_rejects_sensor_internal_length_mismatch() -> N
 
     with pytest.raises(ValueError, match="length mismatch: SO2"):
         parse_renile_iot_payload(payload)
+
+
+def test_history_start_time_is_relative_to_end_time() -> None:
+    assert history_start_time(datetime(2026, 9, 1, 12, 0), 20) == datetime(2026, 8, 12, 12, 0)
+
+
+def test_filter_before_drops_rows_at_or_after_end_time() -> None:
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2026-09-01 10:00", periods=4, freq="h"),
+            "SO2": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+
+    result = filter_before(df, datetime(2026, 9, 1, 12, 0))
+
+    assert result["timestamp"].tolist() == [pd.Timestamp("2026-09-01 10:00"), pd.Timestamp("2026-09-01 11:00")]
+
+
+def test_filter_before_rejects_when_no_data_before_end_time() -> None:
+    df = pd.DataFrame({"timestamp": [pd.Timestamp("2026-09-01 12:00")], "SO2": [1.0]})
+
+    with pytest.raises(ValueError, match="no data before start_date"):
+        filter_before(df, datetime(2026, 9, 1, 12, 0))

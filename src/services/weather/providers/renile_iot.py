@@ -19,12 +19,17 @@ class ReNileIOTWeatherProvider(WeatherProvider):
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    async def fetch_recent_weather(self, jwt: str, device_id: str) -> pd.DataFrame:
-        return await fetch_recent_weather(jwt, device_id, self.settings)
+    async def fetch_recent_weather(self, jwt: str, device_id: str, end_time: datetime | None = None) -> pd.DataFrame:
+        return await fetch_recent_weather(jwt, device_id, self.settings, end_time)
 
 
-async def fetch_recent_weather(jwt: str, device_id: str, settings: Settings) -> pd.DataFrame:
-    start_time = datetime.now() - timedelta(days=settings.renile_iot_history_days)
+async def fetch_recent_weather(
+    jwt: str,
+    device_id: str,
+    settings: Settings,
+    end_time: datetime | None = None,
+) -> pd.DataFrame:
+    start_time = history_start_time(end_time or datetime.now(), settings.renile_iot_history_days)
     params = {
         "data_type": settings.renile_iot_data_type,
         "start_time": start_time.strftime("%Y-%m-%d %H:%M"),
@@ -43,10 +48,11 @@ async def fetch_recent_weather(jwt: str, device_id: str, settings: Settings) -> 
         settings.renile_iot_timeout_seconds,
     )
     logger.info(
-        "Fetching ReNile-IOT weather data device_id=%s data_type=%s start_time=%s history_days=%s",
+        "Fetching ReNile-IOT weather data device_id=%s data_type=%s start_time=%s end_time=%s history_days=%s",
         device_id,
         params["data_type"],
         params["start_time"],
+        end_time,
         settings.renile_iot_history_days,
     )
     start = time.perf_counter()
@@ -69,6 +75,8 @@ async def fetch_recent_weather(jwt: str, device_id: str, settings: Settings) -> 
         raw_df.columns.tolist(),
         _preview_dataframe(raw_df),
     )
+    if end_time is not None:
+        raw_df = filter_before(raw_df, end_time)
     processed_df = preprocess_dynamic_hourly_weather(
         raw_df,
         context_hours=settings.context_hours,
@@ -81,6 +89,19 @@ async def fetch_recent_weather(jwt: str, device_id: str, settings: Settings) -> 
         _preview_dataframe(processed_df),
     )
     return processed_df
+
+
+def history_start_time(end_time: datetime, history_days: int) -> datetime:
+    return end_time - timedelta(days=history_days)
+
+
+def filter_before(df: pd.DataFrame, end_time: datetime) -> pd.DataFrame:
+    filtered = df[df["timestamp"] < pd.Timestamp(end_time)].reset_index(drop=True)
+    logger.info("ReNile-IOT data filtered before end_time=%s rows_before=%s rows_after=%s", end_time, len(df), len(filtered))
+    if filtered.empty:
+        logger.warning("ReNile-IOT has no data before end_time=%s", end_time)
+        raise ValueError(f"ReNile-IOT returned no data before start_date {end_time.isoformat()}.")
+    return filtered
 
 
 def parse_renile_iot_payload(payload: dict[str, Any]) -> pd.DataFrame:

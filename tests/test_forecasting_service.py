@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 
 import pandas as pd
 
@@ -11,10 +12,12 @@ class FakeWeatherProvider:
     def __init__(self) -> None:
         self.jwt: str | None = None
         self.device_id: str | None = None
+        self.end_time: datetime | None = None
 
-    async def fetch_recent_weather(self, jwt: str, device_id: str) -> pd.DataFrame:
+    async def fetch_recent_weather(self, jwt: str, device_id: str, end_time: datetime | None = None) -> pd.DataFrame:
         self.jwt = jwt
         self.device_id = device_id
+        self.end_time = end_time
         return pd.DataFrame(
             {
                 "timestamp": pd.date_range("2026-06-01", periods=336, freq="h"),
