@@ -7,6 +7,14 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+class InsufficientHistoryError(ValueError):
+    pass
+
+
+class InsufficientReadingsError(ValueError):
+    pass
+
+
 WEATHER_COLUMNS = [
     "temperature_2m",
     "relative_humidity_2m",
@@ -171,8 +179,8 @@ def preprocess_dynamic_hourly_weather(
         raise ValueError("Weather dataframe still contains missing values after interpolation.")
 
     if len(cleaned) < context_hours:
-        logger.warning("Dynamic weather preprocessing failed: insufficient rows rows=%s context_hours=%s", len(cleaned), context_hours)
-        raise ValueError(f"Need at least {context_hours} hourly records, got {len(cleaned)}.")
+        logger.warning("Dynamic weather preprocessing failed: insufficient history rows=%s context_hours=%s", len(cleaned), context_hours)
+        raise InsufficientHistoryError(f"Insufficient history: at least {context_hours // 24} days of data are required.")
 
     result = cleaned.tail(context_hours).reset_index()
 
@@ -183,7 +191,7 @@ def preprocess_dynamic_hourly_weather(
 
     if starved_sensors:
         logger.warning(
-            "Dynamic weather preprocessing failed: interpolated context context_hours=%s real_coverage=%.4f "
+            "Dynamic weather preprocessing failed: insufficient readings context_hours=%s real_coverage=%.4f "
             "min_context_coverage=%s starved_sensors=%s sensor_coverage=%s",
             context_hours,
             real_coverage,
@@ -191,9 +199,9 @@ def preprocess_dynamic_hourly_weather(
             starved_sensors,
             sensor_coverage,
         )
-        raise ValueError(
-            f"Context is mostly interpolated: sensors {starved_sensors} have less than "
-            f"{min_context_coverage:.0%} real readings across the {context_hours}-hour context."
+        raise InsufficientReadingsError(
+            f"Insufficient readings: real sensor readings cover less than {min_context_coverage:.0%} "
+            f"of the required {context_hours}-hour window."
         )
 
     logger.info(

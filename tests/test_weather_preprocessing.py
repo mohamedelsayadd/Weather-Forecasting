@@ -2,6 +2,8 @@ import pandas as pd
 import pytest
 
 from src.services.weather_preprocessing import (
+    InsufficientHistoryError,
+    InsufficientReadingsError,
     build_chronos_context,
     preprocess_dynamic_hourly_weather,
     preprocess_hourly_weather,
@@ -100,7 +102,14 @@ def test_preprocess_dynamic_hourly_weather_rejects_mostly_interpolated_context()
     timestamps.append(pd.Timestamp("2026-08-12 11:00:00"))
     raw_df = _sensor_frame(timestamps)
 
-    with pytest.raises(ValueError, match="mostly interpolated"):
+    with pytest.raises(InsufficientReadingsError, match="Insufficient readings"):
+        preprocess_dynamic_hourly_weather(raw_df, context_hours=336, min_context_coverage=0.5)
+
+
+def test_preprocess_dynamic_hourly_weather_rejects_less_than_14_days_of_history() -> None:
+    raw_df = _sensor_frame(list(pd.date_range("2026-07-26 16:00:00", periods=13 * 24, freq="h")))
+
+    with pytest.raises(InsufficientHistoryError, match="Insufficient history"):
         preprocess_dynamic_hourly_weather(raw_df, context_hours=336, min_context_coverage=0.5)
 
 

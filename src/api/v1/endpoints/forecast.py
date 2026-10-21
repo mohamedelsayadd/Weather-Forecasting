@@ -6,6 +6,7 @@ import httpx
 from src.core.config import Settings, get_settings
 from src.models.schemas.forecast import ForecastRequest, ForecastResponse
 from src.services.forecasting_service import ForecastingService
+from src.utils.preprocessing import InsufficientHistoryError, InsufficientReadingsError
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 logger = logging.getLogger(__name__)
@@ -69,6 +70,13 @@ async def create_forecast(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to fetch weather data from ReNile-IOT.",
         ) from exc
+    except (InsufficientHistoryError, InsufficientReadingsError) as exc:
+        logger.warning(
+            "Forecast request has insufficient data device_id=%s error=%s",
+            request_body.device_id,
+            exc,
+        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         logger.warning(
             "Forecast request validation failed device_id=%s error=%s",
