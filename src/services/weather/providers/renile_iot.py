@@ -8,8 +8,11 @@ from typing import Any
 import httpx
 import pandas as pd
 
+from pydantic import ValidationError
+
 from src.core.config import Settings
-from src.services.weather.interface import WeatherProvider
+from src.models.schemas.forecast import Presence
+from src.services.weather.interface import WeatherData, WeatherProvider
 from src.utils.preprocessing import preprocess_dynamic_hourly_weather
 
 logger = logging.getLogger(__name__)
@@ -19,7 +22,7 @@ class ReNileIOTWeatherProvider(WeatherProvider):
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    async def fetch_recent_weather(self, jwt: str, device_id: str, end_time: datetime | None = None) -> pd.DataFrame:
+    async def fetch_recent_weather(self, jwt: str, device_id: str, end_time: datetime | None = None) -> WeatherData:
         return await fetch_recent_weather(jwt, device_id, self.settings, end_time)
 
 
@@ -28,12 +31,13 @@ async def fetch_recent_weather(
     device_id: str,
     settings: Settings,
     end_time: datetime | None = None,
-) -> pd.DataFrame:
+) -> WeatherData:
     start_time = history_start_time(end_time or datetime.now(), settings.renile_iot_history_days)
     params = {
         "data_type": settings.renile_iot_data_type,
         "start_time": start_time.strftime("%Y-%m-%d %H:%M"),
         "device_id": device_id,
+        "include_presence": "true",
     }
     headers = {
         "Authorization": f"JWT {jwt}",
@@ -68,7 +72,14 @@ async def fetch_recent_weather(
         _preview_payload(payload),
     )
 
-    raw_df = parse_renile_iot_payload(payload)
+    presence, sensor_payload = extract_presence(payload)
+    logger.info(
+        "ReNile-IOT presence received device_id=%s is_online=%s last_online_at=%s",
+        device_id,
+        presence.is_online,
+        presence.last_online_at,
+    )
+    raw_df = parse_renile_iot_payload(sensor_payload)
     logger.info(
         "ReNile-IOT raw dataframe parsed rows=%s columns=%s preview=%s",
         len(raw_df),
@@ -88,7 +99,21 @@ async def fetch_recent_weather(
         processed_df.columns.tolist(),
         _preview_dataframe(processed_df),
     )
-    return processed_df
+    return WeatherData(df=processed_df, presence=presence)
+
+
+def extract_presence(payload: dict[str, Any]) -> tuple[Presence, dict[str, Any]]:
+    sensor_payload = dict(payload)
+    raw_presence = sensor_payload.pop("presence", None)
+    if raw_presence is None:
+        logger.warning("ReNile-IOT response is missing presence")
+        raise ValueError("ReNile-IOT response is missing presence.")
+    try:
+        presence = Presence.model_validate(raw_presence)
+    except ValidationError as exc:
+        logger.warning("ReNile-IOT presence is invalid presence=%s", raw_presence)
+        raise ValueError("ReNile-IOT presence is invalid.") from exc
+    return presence, sensor_payload
 
 
 def history_start_time(end_time: datetime, history_days: int) -> datetime:

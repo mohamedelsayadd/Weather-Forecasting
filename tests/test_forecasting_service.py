@@ -4,8 +4,9 @@ from datetime import datetime
 import pandas as pd
 
 from src.core.config import Settings
-from src.models.schemas.forecast import ForecastRequest, ForecastResponse
+from src.models.schemas.forecast import ForecastRequest, ForecastResponse, Presence
 from src.services.forecasting_service import ForecastingService
+from src.services.weather.interface import WeatherData
 
 
 class FakeWeatherProvider:
@@ -14,17 +15,19 @@ class FakeWeatherProvider:
         self.device_id: str | None = None
         self.end_time: datetime | None = None
 
-    async def fetch_recent_weather(self, jwt: str, device_id: str, end_time: datetime | None = None) -> pd.DataFrame:
+    async def fetch_recent_weather(self, jwt: str, device_id: str, end_time: datetime | None = None) -> WeatherData:
         self.jwt = jwt
         self.device_id = device_id
         self.end_time = end_time
-        return pd.DataFrame(
+        df = pd.DataFrame(
             {
                 "timestamp": pd.date_range("2026-06-01", periods=336, freq="h"),
                 "SO2": [float(value) for value in range(336)],
                 "ambient_temp": [float(value) for value in range(100, 436)],
             }
         )
+        presence = Presence(is_online=True, last_online_at="2026-10-18T07:06:04.865Z")
+        return WeatherData(df=df, presence=presence)
 
 
 class FakeAIModel:
@@ -96,6 +99,7 @@ def test_create_forecast_uses_all_renile_iot_columns() -> None:
         "SO2": {"min": 0.0, "max": 23.0},
         "ambient_temp": {"min": 100.0, "max": 123.0},
     }
+    assert response.model_dump()["presence"] == {"is_online": True, "last_online_at": "2026-10-18T07:06:04.865Z"}
     assert ai_model.context_df is not None
     assert ai_model.targets == ["SO2", "ambient_temp"]
     assert ai_model.context_df["SO2"].tolist() == [float(value) for value in range(336)]

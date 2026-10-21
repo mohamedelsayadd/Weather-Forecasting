@@ -23,8 +23,14 @@ class ForecastRequest(BaseModel):
         return value
 
 
+class Presence(BaseModel):
+    is_online: bool
+    last_online_at: str | None
+
+
 class ForecastResponse(BaseModel):
     last12hour: list[dict[str, Any]]
     current: dict[str, Any]
     hourly168: list[dict[str, Any]]
     daily7: list[dict[str, Any]]
+    presence: Presence

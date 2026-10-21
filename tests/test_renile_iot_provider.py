@@ -3,7 +3,30 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-from src.services.weather.providers.renile_iot import filter_before, history_start_time, parse_renile_iot_payload
+from src.services.weather.providers.renile_iot import (
+    extract_presence,
+    filter_before,
+    history_start_time,
+    parse_renile_iot_payload,
+)
+
+
+def test_extract_presence_separates_presence_from_sensors() -> None:
+    sensor = {"labels": ["2026-06-14T00:00:00.000Z"], "data": [{"$numberDecimal": "24"}]}
+    payload = {
+        "SO2": sensor,
+        "presence": {"is_online": True, "last_online_at": "2026-10-18T07:06:04.865Z"},
+    }
+
+    presence, sensor_payload = extract_presence(payload)
+
+    assert presence.model_dump() == {"is_online": True, "last_online_at": "2026-10-18T07:06:04.865Z"}
+    assert sensor_payload == {"SO2": sensor}
+
+
+def test_extract_presence_rejects_missing_presence() -> None:
+    with pytest.raises(ValueError, match="missing presence"):
+        extract_presence({"SO2": {"labels": [], "data": []}})
 
 
 def test_parse_renile_iot_payload_preserves_dynamic_sensor_columns() -> None:

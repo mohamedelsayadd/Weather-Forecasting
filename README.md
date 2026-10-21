@@ -23,11 +23,11 @@ uv run uvicorn src.main:app --reload
 }
 ```
 
-The service calls ReNile-IOT with `data_type=month_hours`, `start_time` set to current time minus 20 days, and the request `device_id`. If the optional request field `start_date` (ISO datetime, e.g. `2026-09-01T12:00`, UTC if no offset) is given, the 20-day window ends at `start_date` instead of now and readings at or after it are dropped. It interpolates hourly gaps, then uses only the last 14 days / 336 hourly rows as model context. Chronos predicts the next 7 days / 168 hourly rows. The request `JWT` is sent as `Authorization: JWT <token>`.
+The service calls ReNile-IOT with `data_type=month_hours`, `start_time` set to current time minus 20 days, the request `device_id`, and `include_presence=true`. If the optional request field `start_date` (ISO datetime, e.g. `2026-09-01T12:00`, UTC if no offset) is given, the 20-day window ends at `start_date` instead of now and readings at or after it are dropped. It interpolates hourly gaps, then uses only the last 14 days / 336 hourly rows as model context. Chronos predicts the next 7 days / 168 hourly rows. The request `JWT` is sent as `Authorization: JWT <token>`.
 
 All sensor keys returned by ReNile-IOT are used as forecast targets dynamically. Column names are not mapped or filtered.
 
-The response has four sections. `last12hour` contains the observed (interpolated hourly) readings from 12 hours before the latest reading up to and including it. `hourly168` contains the hourly forecast for the next 168 hours (7 days):
+The response has five sections. `presence` is ReNile-IOT's device presence (`is_online`, `last_online_at`), passed through unchanged. `last12hour` contains the observed (interpolated hourly) readings from 12 hours before the latest reading up to and including it. `hourly168` contains the hourly forecast for the next 168 hours (7 days):
 
 ```json
 {
@@ -56,6 +56,10 @@ The response has four sections. `last12hour` contains the observed (interpolated
       "SO2": {"min": 20.0, "max": 41.0},
       "ambient_temp": {"min": 27.5, "max": 40.2}
     }
-  ]
+  ],
+  "presence": {
+    "is_online": true,
+    "last_online_at": "2026-10-18T07:06:04.865Z"
+  }
 }
 ```

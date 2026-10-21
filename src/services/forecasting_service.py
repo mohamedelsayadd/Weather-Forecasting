@@ -26,11 +26,12 @@ class ForecastingService:
             request_body.device_id,
             request_body.start_date,
         )
-        weather_df = await self.weather_provider.fetch_recent_weather(
+        weather = await self.weather_provider.fetch_recent_weather(
             request_body.JWT,
             request_body.device_id,
             request_body.start_date,
         )
+        weather_df = weather.df
         logger.info(
             "Forecast service received processed weather data device_id=%s rows=%s columns=%s preview=%s",
             request_body.device_id,
@@ -85,6 +86,7 @@ class ForecastingService:
             current=current,
             hourly168=hourly168,
             daily7=daily7,
+            presence=weather.presence,
         )
 
 
