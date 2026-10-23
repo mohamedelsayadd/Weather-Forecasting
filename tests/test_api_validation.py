@@ -138,7 +138,11 @@ def test_forecast_returns_409_for_insufficient_history(monkeypatch) -> None:
     response = _post_forecast_with_provider(monkeypatch, FakeWeatherProvider(timestamps))
 
     assert response.status_code == 409
-    assert response.json() == {"detail": "Insufficient history: at least 14 days of data are required."}
+    assert response.json() == {
+        "detail": "Insufficient history: at least 14 days of data are required, but the device only has 13 days of data.",
+        "available_days": 13,
+        "required_days": 14,
+    }
 
 
 def test_forecast_returns_409_for_insufficient_readings(monkeypatch) -> None:

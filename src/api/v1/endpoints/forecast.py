@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 import httpx
 
 from src.core.config import Settings, get_settings
@@ -24,7 +25,7 @@ async def create_forecast(
     request_body: ForecastRequest,
     request: Request,
     settings: Settings = Depends(get_settings),
-) -> ForecastResponse:
+) -> ForecastResponse | JSONResponse:
     logger.info(
         "Forecast request received source=renile_iot device_id=%s start_date=%s",
         request_body.device_id,
@@ -70,7 +71,22 @@ async def create_forecast(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to fetch weather data from ReNile-IOT.",
         ) from exc
-    except (InsufficientHistoryError, InsufficientReadingsError) as exc:
+    except InsufficientHistoryError as exc:
+        logger.warning(
+            "Forecast request has insufficient history device_id=%s available_days=%s required_days=%s",
+            request_body.device_id,
+            exc.available_days,
+            exc.required_days,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": str(exc),
+                "available_days": exc.available_days,
+                "required_days": exc.required_days,
+            },
+        )
+    except InsufficientReadingsError as exc:
         logger.warning(
             "Forecast request has insufficient data device_id=%s error=%s",
             request_body.device_id,

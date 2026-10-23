@@ -66,11 +66,24 @@ Every error response has this shape:
 
 For request validation errors, `detail` is a list of FastAPI validation errors instead of a string.
 
+The insufficient-history `409` also includes structured fields, so clients don't need to parse the message:
+
+```json
+{
+  "detail": "Insufficient history: at least 14 days of data are required, but the device only has 10 days of data.",
+  "available_days": 10,
+  "required_days": 14
+}
+```
+
+- `available_days` (int): full days of data the device has, rounded down (`0` means less than one day).
+- `required_days` (int): days of data needed for a forecast.
+
 | Status | When                                                                                                  | Example `detail`                                  |
 |--------|-------------------------------------------------------------------------------------------------------|---------------------------------------------------|
 | `422`  | The request body is invalid: a field is missing or empty, there is an extra field, or `start_date` is malformed or in the future. | `[{"loc": ["body", "device_id"], "msg": "Field required", ...}]` |
 | `422`  | The data can't be used for a forecast: an empty or invalid ReNile-IOT payload, missing `presence`, or no data before `start_date`. | `"ReNile-IOT response is empty."`    |
-| `409`  | Not enough history: the device has less than 14 days (336 hours) of data.                              | `"Insufficient history: at least 14 days of data are required."` |
+| `409`  | Not enough history: the device has less than 14 days (336 hours) of data.                              | `"Insufficient history: at least 14 days of data are required, but the device only has 10 days of data."` |
 | `409`  | Not enough real readings: actual readings cover less than 50% of the 336-hour window.                 | `"Insufficient readings: real sensor readings cover less than 50% of the required 336-hour window."` |
 | `502`  | ReNile-IOT returned an error status, for example because of an invalid JWT.                            | `"ReNile-IOT returned an error: 401"`             |
 | `502`  | ReNile-IOT couldn't be reached (network error or timeout).                                            | `"Failed to fetch weather data from ReNile-IOT."` |

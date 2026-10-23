@@ -8,7 +8,10 @@ logger = logging.getLogger(__name__)
 
 
 class InsufficientHistoryError(ValueError):
-    pass
+    def __init__(self, message: str, available_days: int, required_days: int) -> None:
+        super().__init__(message)
+        self.available_days = available_days
+        self.required_days = required_days
 
 
 class InsufficientReadingsError(ValueError):
@@ -180,7 +183,12 @@ def preprocess_dynamic_hourly_weather(
 
     if len(cleaned) < context_hours:
         logger.warning("Dynamic weather preprocessing failed: insufficient history rows=%s context_hours=%s", len(cleaned), context_hours)
-        raise InsufficientHistoryError(f"Insufficient history: at least {context_hours // 24} days of data are required.")
+        raise InsufficientHistoryError(
+            f"Insufficient history: at least {context_hours // 24} days of data are required, "
+            f"but the device only has {_format_available_days(len(cleaned))} of data.",
+            available_days=len(cleaned) // 24,
+            required_days=context_hours // 24,
+        )
 
     result = cleaned.tail(context_hours).reset_index()
 
@@ -251,6 +259,13 @@ def build_dynamic_chronos_context(df: pd.DataFrame) -> tuple[pd.DataFrame, list[
         _preview_dataframe(context_df),
     )
     return context_df, targets
+
+
+def _format_available_days(hours: int) -> str:
+    days = hours // 24
+    if days < 1:
+        return "less than 1 day"
+    return "1 day" if days == 1 else f"{days} days"
 
 
 def _preview_dataframe(df: pd.DataFrame, rows: int = 3) -> list[dict[str, object]]:

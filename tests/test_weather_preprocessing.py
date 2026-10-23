@@ -113,6 +113,20 @@ def test_preprocess_dynamic_hourly_weather_rejects_less_than_14_days_of_history(
         preprocess_dynamic_hourly_weather(raw_df, context_hours=336, min_context_coverage=0.5)
 
 
+@pytest.mark.parametrize(
+    ("hours", "days", "expected"),
+    [(5 * 24 + 10, 5, "only has 5 days of data"), (30, 1, "only has 1 day of data"), (10, 0, "only has less than 1 day of data")],
+)
+def test_preprocess_dynamic_hourly_weather_reports_available_days(hours: int, days: int, expected: str) -> None:
+    raw_df = _sensor_frame(list(pd.date_range("2026-07-26 16:00:00", periods=hours, freq="h")))
+
+    with pytest.raises(InsufficientHistoryError, match=expected) as exc_info:
+        preprocess_dynamic_hourly_weather(raw_df, context_hours=336, min_context_coverage=0.5)
+
+    assert exc_info.value.available_days == days
+    assert exc_info.value.required_days == 14
+
+
 def test_preprocess_dynamic_hourly_weather_allows_gaps_above_coverage_threshold() -> None:
     timestamps = [
         timestamp
