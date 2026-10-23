@@ -66,7 +66,8 @@ async def fetch_recent_weather(
     latency_ms = (time.perf_counter() - start) * 1000
     payload = response.json()
     logger.info(
-        "ReNile-IOT API response received status_code=%s latency_ms=%.2f payload_preview=%s",
+        "ReNile-IOT API response received device_id=%s status_code=%s latency_ms=%.2f payload_preview=%s",
+        device_id,
         response.status_code,
         latency_ms,
         _preview_payload(payload),

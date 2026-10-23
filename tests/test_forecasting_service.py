@@ -10,7 +10,8 @@ from src.services.weather.interface import WeatherData
 
 
 class FakeWeatherProvider:
-    def __init__(self) -> None:
+    def __init__(self, extra_columns: dict[str, list[float | None]] | None = None) -> None:
+        self.extra_columns = extra_columns or {}
         self.jwt: str | None = None
         self.device_id: str | None = None
         self.end_time: datetime | None = None
@@ -26,6 +27,8 @@ class FakeWeatherProvider:
                 "ambient_temp": [float(value) for value in range(100, 436)],
             }
         )
+        for column, values in self.extra_columns.items():
+            df[column] = values
         presence = Presence(is_online=True, last_online_at="2026-10-18T07:06:04.865Z")
         return WeatherData(df=df, presence=presence)
 
@@ -106,9 +109,11 @@ def test_create_forecast_uses_all_renile_iot_columns() -> None:
     assert ai_model.context_df["ambient_temp"].tolist() == [float(value) for value in range(100, 436)]
 
 
-async def create_forecast_with_renile_iot_values() -> tuple[ForecastResponse, FakeAIModel, FakeWeatherProvider]:
+async def create_forecast_with_renile_iot_values(
+    weather_provider: FakeWeatherProvider | None = None,
+) -> tuple[ForecastResponse, FakeAIModel, FakeWeatherProvider]:
     ai_model = FakeAIModel()
-    weather_provider = FakeWeatherProvider()
+    weather_provider = weather_provider or FakeWeatherProvider()
     service = ForecastingService(
         weather_provider=weather_provider,
         ai_model=ai_model,
@@ -121,3 +126,21 @@ async def create_forecast_with_renile_iot_values() -> tuple[ForecastResponse, Fa
 
     response = await service.create_forecast(request)
     return response, ai_model, weather_provider
+
+
+def test_create_forecast_returns_null_for_rejected_sensor() -> None:
+    provider = FakeWeatherProvider(extra_columns={"FlowRate": [None] * 336})
+
+    response, ai_model, _ = asyncio.run(create_forecast_with_renile_iot_values(provider))
+
+    assert ai_model.targets == ["SO2", "ambient_temp"]
+    assert "FlowRate" not in ai_model.context_df.columns
+    assert response.current == {"time": "2026-06-14T23:00:00", "SO2": 335.0, "ambient_temp": 435.0, "FlowRate": None}
+    assert all(record["FlowRate"] is None for record in response.last12hour)
+    assert response.hourly168[0] == {"time": "2026-06-15T00:00:00", "SO2": 0.0, "ambient_temp": 100.0, "FlowRate": None}
+    assert response.daily7[0] == {
+        "time": "2026-06-15",
+        "SO2": {"min": 0.0, "max": 23.0},
+        "ambient_temp": {"min": 100.0, "max": 123.0},
+        "FlowRate": None,
+    }

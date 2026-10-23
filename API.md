@@ -28,6 +28,8 @@ Any other fields are rejected.
 
 Sensor keys (e.g. `SO2`, `ambient_temp`) are dynamic and match the ones the device reports.
 
+Each sensor is validated on its own. A sensor is rejected when it has no readings, less than 14 days of history, or real readings covering less than 50% of the 336-hour window. A rejected sensor keeps its key, with `null` as the value in `last12hour`, `current`, `hourly168` and `daily7`. The other sensors are forecast normally. The request fails only when every sensor is rejected.
+
 | Field        | Description                                                         |
 |--------------|---------------------------------------------------------------------|
 | `last12hour` | Observed hourly readings for the last 12 hours, including the latest one. |
@@ -83,8 +85,8 @@ The insufficient-history `409` also includes structured fields, so clients don't
 |--------|-------------------------------------------------------------------------------------------------------|---------------------------------------------------|
 | `422`  | The request body is invalid: a field is missing or empty, there is an extra field, or `start_date` is malformed or in the future. | `[{"loc": ["body", "device_id"], "msg": "Field required", ...}]` |
 | `422`  | The data can't be used for a forecast: an empty or invalid ReNile-IOT payload, missing `presence`, or no data before `start_date`. | `"ReNile-IOT response is empty."`    |
-| `409`  | Not enough history: the device has less than 14 days (336 hours) of data.                              | `"Insufficient history: at least 14 days of data are required, but the device only has 10 days of data."` |
-| `409`  | Not enough real readings: actual readings cover less than 50% of the 336-hour window.                 | `"Insufficient readings: real sensor readings cover less than 50% of the required 336-hour window."` |
+| `409`  | Not enough history: every sensor has less than 14 days (336 hours) of data.                            | `"Insufficient history: at least 14 days of data are required, but the device only has 10 days of data."` |
+| `409`  | Every sensor is rejected and at least one is empty or covers less than 50% of the 336-hour window.     | `"Insufficient readings: real sensor readings cover less than 50% of the required 336-hour window."` |
 | `502`  | ReNile-IOT returned an error status, for example because of an invalid JWT.                            | `"ReNile-IOT returned an error: 401"`             |
 | `502`  | ReNile-IOT couldn't be reached (network error or timeout).                                            | `"Failed to fetch weather data from ReNile-IOT."` |
 | `503`  | The service hasn't finished loading the model.                                                        | `"Forecasting dependencies are not loaded."`      |

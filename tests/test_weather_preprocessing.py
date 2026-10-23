@@ -141,6 +141,49 @@ def test_preprocess_dynamic_hourly_weather_allows_gaps_above_coverage_threshold(
     assert result[SENSORS].isna().sum().sum() == 0
 
 
+def _full_window_timestamps() -> list[pd.Timestamp]:
+    return list(pd.date_range("2026-07-26 16:00:00", periods=336, freq="h"))
+
+
+def test_preprocess_dynamic_hourly_weather_returns_null_for_empty_sensor() -> None:
+    raw_df = _sensor_frame(_full_window_timestamps())
+    raw_df["FlowRate"] = None
+
+    result = preprocess_dynamic_hourly_weather(raw_df, context_hours=336, min_context_coverage=0.5)
+
+    assert len(result) == 336
+    assert result["FlowRate"].isna().all()
+    assert result[SENSORS].isna().sum().sum() == 0
+
+
+def test_preprocess_dynamic_hourly_weather_returns_null_for_low_coverage_sensor() -> None:
+    raw_df = _sensor_frame(_full_window_timestamps())
+    raw_df.loc[raw_df.index % 4 != 0, "SO2"] = None  # 25% coverage
+
+    result = preprocess_dynamic_hourly_weather(raw_df, context_hours=336, min_context_coverage=0.5)
+
+    assert result["SO2"].isna().all()
+    assert result[["NO2", "ambient_temp"]].isna().sum().sum() == 0
+
+
+def test_preprocess_dynamic_hourly_weather_returns_null_for_short_history_sensor() -> None:
+    raw_df = _sensor_frame(_full_window_timestamps())
+    raw_df.loc[: 336 - 5 * 24 - 1, "SO2"] = None  # only the last 5 days
+
+    result = preprocess_dynamic_hourly_weather(raw_df, context_hours=336, min_context_coverage=0.5)
+
+    assert result["SO2"].isna().all()
+    assert result[["NO2", "ambient_temp"]].isna().sum().sum() == 0
+
+
+def test_preprocess_dynamic_hourly_weather_rejects_when_all_sensors_are_empty() -> None:
+    raw_df = _sensor_frame(_full_window_timestamps())
+    raw_df[SENSORS] = None
+
+    with pytest.raises(InsufficientReadingsError, match="Insufficient readings"):
+        preprocess_dynamic_hourly_weather(raw_df, context_hours=336, min_context_coverage=0.5)
+
+
 def test_build_chronos_context_uses_selected_parameter_as_target() -> None:
     df = pd.DataFrame(
         {

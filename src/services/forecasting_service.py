@@ -39,10 +39,13 @@ class ForecastingService:
             weather_df.columns.tolist(),
             weather_df.head(3).to_dict(orient="records"),
         )
-        context_df, weather_parameters = build_dynamic_chronos_context(weather_df)
-        current = _current_weather_record(weather_df, weather_parameters)
+        sensors = [column for column in weather_df.columns if column != "timestamp"]
+        weather_parameters = [sensor for sensor in sensors if weather_df[sensor].notna().all()]
+        rejected_sensors = [sensor for sensor in sensors if sensor not in weather_parameters]
+        context_df, weather_parameters = build_dynamic_chronos_context(weather_df[["timestamp", *weather_parameters]])
+        current = _current_weather_record(weather_df, sensors)
         logger.info("Forecast service built current weather record device_id=%s current=%s", request_body.device_id, current)
-        last12hour = _last_hours_weather_records(weather_df, weather_parameters, hours=12)
+        last12hour = _last_hours_weather_records(weather_df, sensors, hours=12)
         logger.info("Forecast service built last12hour records device_id=%s rows=%s", request_body.device_id, len(last12hour))
         logger.info(
             "Forecast service prepared model input device_id=%s targets=%s rows=%s columns=%s preview=%s",
@@ -64,6 +67,14 @@ class ForecastingService:
         )
         hourly168 = self.ai_model.forecast_to_hourly_rows(pred_df, weather_parameters, hours=168)
         daily7 = self.ai_model.forecast_to_daily_ranges(pred_df, weather_parameters, days=7)
+        hourly168 = _with_null_sensors(hourly168, sensors)
+        daily7 = _with_null_sensors(daily7, sensors)
+        if rejected_sensors:
+            logger.info(
+                "Forecast response filled rejected sensors with null device_id=%s rejected_sensors=%s",
+                request_body.device_id,
+                rejected_sensors,
+            )
         logger.info(
             "Forecast response sections built device_id=%s hourly168_rows=%s daily7_rows=%s hourly168_preview=%s daily7_preview=%s",
             request_body.device_id,
@@ -88,6 +99,10 @@ class ForecastingService:
             daily7=daily7,
             presence=weather.presence,
         )
+
+
+def _with_null_sensors(records: list[dict[str, Any]], sensors: list[str]) -> list[dict[str, Any]]:
+    return [{"time": record["time"], **{sensor: record.get(sensor) for sensor in sensors}} for record in records]
 
 
 def _current_weather_record(weather_df: pd.DataFrame, weather_parameters: list[str]) -> dict[str, Any]:

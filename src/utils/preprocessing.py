@@ -175,59 +175,85 @@ def preprocess_dynamic_hourly_weather(
         cleaned.index.max(),
         _preview_dataframe(cleaned.reset_index()),
     )
-    cleaned = cleaned.interpolate(method="time").ffill().bfill()
+    window = pd.date_range(end=cleaned.index.max(), periods=context_hours, freq="h")
+    window_mask = real_mask.reindex(window, fill_value=False)
+    sensor_coverage = {column: float(window_mask[column].mean()) for column in sensor_columns}
+    history_hours = {column: _history_hours(real_mask[column]) for column in sensor_columns}
+    rejected = {
+        column: reason
+        for column in sensor_columns
+        if (reason := _rejection_reason(history_hours[column], sensor_coverage[column], context_hours, min_context_coverage))
+    }
+    valid_sensors = [column for column in sensor_columns if column not in rejected]
 
-    if cleaned.isna().any().any():
+    if not valid_sensors:
+        raise _all_sensors_rejected_error(rejected, history_hours, context_hours, min_context_coverage)
+    if rejected:
+        logger.warning("Dynamic weather preprocessing rejected sensors rejected=%s valid_sensors=%s", rejected, valid_sensors)
+
+    filled = cleaned[valid_sensors].interpolate(method="time").ffill().bfill().reindex(window)
+    if filled.isna().any().any():
         logger.warning("Dynamic weather preprocessing failed: nulls remain after interpolation")
         raise ValueError("Weather dataframe still contains missing values after interpolation.")
 
-    if len(cleaned) < context_hours:
-        logger.warning("Dynamic weather preprocessing failed: insufficient history rows=%s context_hours=%s", len(cleaned), context_hours)
-        raise InsufficientHistoryError(
-            f"Insufficient history: at least {context_hours // 24} days of data are required, "
-            f"but the device only has {_format_available_days(len(cleaned))} of data.",
-            available_days=len(cleaned) // 24,
-            required_days=context_hours // 24,
-        )
-
-    result = cleaned.tail(context_hours).reset_index()
-
-    context_mask = real_mask.tail(context_hours)
-    sensor_coverage = {column: float(context_mask[column].mean()) for column in sensor_columns}
-    real_coverage = float(context_mask.to_numpy().mean())
-    starved_sensors = sorted(column for column, coverage in sensor_coverage.items() if coverage < min_context_coverage)
-
-    if starved_sensors:
-        logger.warning(
-            "Dynamic weather preprocessing failed: insufficient readings context_hours=%s real_coverage=%.4f "
-            "min_context_coverage=%s starved_sensors=%s sensor_coverage=%s",
-            context_hours,
-            real_coverage,
-            min_context_coverage,
-            starved_sensors,
-            sensor_coverage,
-        )
-        raise InsufficientReadingsError(
-            f"Insufficient readings: real sensor readings cover less than {min_context_coverage:.0%} "
-            f"of the required {context_hours}-hour window."
-        )
+    for column in rejected:
+        filled[column] = float("nan")
+    result = filled[sensor_columns].rename_axis("timestamp").reset_index()
 
     logger.info(
-        "Dynamic weather preprocessing completed input_rows=%s output_rows=%s sensors=%s missing_before=%s missing_after_frequency=%s invalid_timestamps=%s real_coverage=%.4f real_rows_in_context=%s sensor_coverage=%s start=%s end=%s processed_preview=%s",
+        "Dynamic weather preprocessing completed input_rows=%s output_rows=%s sensors=%s valid_sensors=%s rejected=%s missing_before=%s missing_after_frequency=%s invalid_timestamps=%s sensor_coverage=%s start=%s end=%s processed_preview=%s",
         len(df),
         len(result),
         len(sensor_columns),
+        valid_sensors,
+        rejected,
         missing_before,
         missing_after_frequency,
         invalid_timestamps,
-        real_coverage,
-        int(context_mask.all(axis=1).sum()),
         sensor_coverage,
         result["timestamp"].min(),
         result["timestamp"].max(),
         _preview_dataframe(result),
     )
     return result
+
+
+def _history_hours(real: pd.Series) -> int:
+    if not real.any():
+        return 0
+    first = real.idxmax()
+    return int((real.index.max() - first) / pd.Timedelta(hours=1)) + 1
+
+
+def _rejection_reason(history_hours: int, coverage: float, context_hours: int, min_context_coverage: float) -> str | None:
+    if history_hours == 0:
+        return "empty"
+    if history_hours < context_hours:
+        return f"insufficient_history(available_days={history_hours // 24})"
+    if coverage < min_context_coverage:
+        return f"low_coverage({coverage:.2f})"
+    return None
+
+
+def _all_sensors_rejected_error(
+    rejected: dict[str, str],
+    history_hours: dict[str, int],
+    context_hours: int,
+    min_context_coverage: float,
+) -> ValueError:
+    logger.warning("Dynamic weather preprocessing failed: all sensors rejected rejected=%s", rejected)
+    if all(reason.startswith("insufficient_history") for reason in rejected.values()):
+        available_hours = max(history_hours.values())
+        return InsufficientHistoryError(
+            f"Insufficient history: at least {context_hours // 24} days of data are required, "
+            f"but the device only has {_format_available_days(available_hours)} of data.",
+            available_days=available_hours // 24,
+            required_days=context_hours // 24,
+        )
+    return InsufficientReadingsError(
+        f"Insufficient readings: real sensor readings cover less than {min_context_coverage:.0%} "
+        f"of the required {context_hours}-hour window."
+    )
 
 
 def build_dynamic_chronos_context(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
