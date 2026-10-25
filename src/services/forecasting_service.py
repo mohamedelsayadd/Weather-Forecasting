@@ -45,8 +45,8 @@ class ForecastingService:
         context_df, weather_parameters = build_dynamic_chronos_context(weather_df[["timestamp", *weather_parameters]])
         current = _current_weather_record(weather_df, sensors)
         logger.info("Forecast service built current weather record device_id=%s current=%s", request_body.device_id, current)
-        last12hour = _last_hours_weather_records(weather_df, sensors, hours=12)
-        logger.info("Forecast service built last12hour records device_id=%s rows=%s", request_body.device_id, len(last12hour))
+        last24hour = _last_hours_weather_records(weather_df, sensors, hours=24)
+        logger.info("Forecast service built last24hour records device_id=%s rows=%s", request_body.device_id, len(last24hour))
         logger.info(
             "Forecast service prepared model input device_id=%s targets=%s rows=%s columns=%s preview=%s",
             request_body.device_id,
@@ -93,7 +93,7 @@ class ForecastingService:
         )
 
         return ForecastResponse(
-            last12hour=last12hour,
+            last24hour=last24hour,
             current=current,
             hourly168=hourly168,
             daily7=daily7,

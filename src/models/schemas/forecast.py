@@ -29,7 +29,7 @@ class Presence(BaseModel):
 
 
 class ForecastResponse(BaseModel):
-    last12hour: list[dict[str, Any]]
+    last24hour: list[dict[str, Any]]
     current: dict[str, Any]
     hourly168: list[dict[str, Any]]
     daily7: list[dict[str, Any]]

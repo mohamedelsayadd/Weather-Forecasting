@@ -89,10 +89,10 @@ def test_create_forecast_uses_all_renile_iot_columns() -> None:
         "SO2": 335.0,
         "ambient_temp": 435.0,
     }
-    assert len(response.last12hour) == 13
-    assert response.last12hour[0] == {"time": "2026-06-14T11:00:00", "SO2": 323.0, "ambient_temp": 423.0}
-    assert response.last12hour[-1] == response.current
-    assert list(response.model_dump())[0] == "last12hour"
+    assert len(response.last24hour) == 25
+    assert response.last24hour[0] == {"time": "2026-06-13T23:00:00", "SO2": 311.0, "ambient_temp": 411.0}
+    assert response.last24hour[-1] == response.current
+    assert list(response.model_dump())[0] == "last24hour"
     assert len(response.hourly168) == 168
     assert response.hourly168[0] == {"time": "2026-06-15T00:00:00", "SO2": 0.0, "ambient_temp": 100.0}
     assert response.hourly168[-1] == {"time": "2026-06-21T23:00:00", "SO2": 167.0, "ambient_temp": 267.0}
@@ -136,7 +136,7 @@ def test_create_forecast_returns_null_for_rejected_sensor() -> None:
     assert ai_model.targets == ["SO2", "ambient_temp"]
     assert "FlowRate" not in ai_model.context_df.columns
     assert response.current == {"time": "2026-06-14T23:00:00", "SO2": 335.0, "ambient_temp": 435.0, "FlowRate": None}
-    assert all(record["FlowRate"] is None for record in response.last12hour)
+    assert all(record["FlowRate"] is None for record in response.last24hour)
     assert response.hourly168[0] == {"time": "2026-06-15T00:00:00", "SO2": 0.0, "ambient_temp": 100.0, "FlowRate": None}
     assert response.daily7[0] == {
         "time": "2026-06-15",

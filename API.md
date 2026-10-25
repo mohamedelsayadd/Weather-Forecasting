@@ -28,11 +28,11 @@ Any other fields are rejected.
 
 Sensor keys (e.g. `SO2`, `ambient_temp`) are dynamic and match the ones the device reports.
 
-Each sensor is validated on its own. A sensor is rejected when it has no readings, less than 14 days of history, or real readings covering less than 50% of the 336-hour window. A rejected sensor keeps its key, with `null` as the value in `last12hour`, `current`, `hourly168` and `daily7`. The other sensors are forecast normally. The request fails only when every sensor is rejected.
+Each sensor is validated on its own. A sensor is rejected when it has no readings, less than 14 days of history, or real readings covering less than 50% of the 336-hour window. A rejected sensor keeps its key, with `null` as the value in `last24hour`, `current`, `hourly168` and `daily7`. The other sensors are forecast normally. The request fails only when every sensor is rejected.
 
 | Field        | Description                                                         |
 |--------------|---------------------------------------------------------------------|
-| `last12hour` | Observed hourly readings for the last 12 hours, including the latest one. |
+| `last24hour` | Observed hourly readings for the last 24 hours, including the latest one. |
 | `current`    | Latest observed reading.                                            |
 | `hourly168`  | Hourly forecast for the next 168 hours.                             |
 | `daily7`     | Daily `min`/`max` forecast for the next 7 days.                     |
@@ -40,7 +40,7 @@ Each sensor is validated on its own. A sensor is rejected when it has no reading
 
 ```json
 {
-  "last12hour": [
+  "last24hour": [
     {"time": "2026-06-15T22:00:00", "SO2": 22.4, "ambient_temp": 30.1}
   ],
   "current": {"time": "2026-06-16T10:00:00", "SO2": 24.0, "ambient_temp": 33.2},
